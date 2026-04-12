@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import * as api from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
@@ -13,18 +13,11 @@ export type Tag = {
 
 export function useTags() {
   const { user } = useAuth();
-
   return useQuery({
     queryKey: ['tags', user?.id],
-    queryFn: async () => {
+    queryFn: () => {
       if (!user) return [];
-      const { data, error } = await supabase
-        .from('tags')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('name');
-      if (error) throw error;
-      return data as Tag[];
+      return api.getTags(user.id) as Tag[];
     },
     enabled: !!user,
   });
@@ -41,8 +34,7 @@ export function useTagMutations() {
   const createTag = useMutation({
     mutationFn: async ({ name, color }: { name: string; color: string }) => {
       if (!user) throw new Error('Not authenticated');
-      const { error } = await supabase.from('tags').insert({ user_id: user.id, name, color });
-      if (error) throw error;
+      api.createTag(user.id, name, color);
     },
     onSuccess: () => { invalidate(); toast.success('Tag created'); },
     onError: (e: Error) => toast.error(e.message),
@@ -50,26 +42,21 @@ export function useTagMutations() {
 
   const updateTag = useMutation({
     mutationFn: async ({ id, name, color }: { id: string; name: string; color: string }) => {
-      const { error } = await supabase.from('tags').update({ name, color }).eq('id', id);
-      if (error) throw error;
+      api.updateTag(id, name, color);
     },
     onSuccess: () => { invalidate(); toast.success('Tag updated'); },
     onError: (e: Error) => toast.error(e.message),
   });
 
   const deleteTag = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from('tags').delete().eq('id', id);
-      if (error) throw error;
-    },
+    mutationFn: async (id: string) => { api.deleteTag(id); },
     onSuccess: () => { invalidate(); toast.success('Tag deleted'); },
     onError: (e: Error) => toast.error(e.message),
   });
 
   const addTagToDocument = useMutation({
     mutationFn: async ({ documentId, tagId }: { documentId: string; tagId: string }) => {
-      const { error } = await supabase.from('document_tags').insert({ document_id: documentId, tag_id: tagId });
-      if (error) throw error;
+      api.addTagToDocument(documentId, tagId);
     },
     onSuccess: () => invalidate(),
     onError: (e: Error) => toast.error(e.message),
@@ -77,10 +64,7 @@ export function useTagMutations() {
 
   const removeTagFromDocument = useMutation({
     mutationFn: async ({ documentId, tagId }: { documentId: string; tagId: string }) => {
-      const { error } = await supabase.from('document_tags').delete()
-        .eq('document_id', documentId)
-        .eq('tag_id', tagId);
-      if (error) throw error;
+      api.removeTagFromDocument(documentId, tagId);
     },
     onSuccess: () => invalidate(),
     onError: (e: Error) => toast.error(e.message),

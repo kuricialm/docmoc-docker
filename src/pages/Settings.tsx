@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
+import * as api from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -14,36 +14,25 @@ export default function SettingsPage() {
 
   const [newPassword, setNewPassword] = useState('');
   const [passwordLoading, setPasswordLoading] = useState(false);
-
   const [logoUploading, setLogoUploading] = useState(false);
-
   const [registrationEnabled, setRegistrationEnabled] = useState(true);
-  const [registrationLoading, setRegistrationLoading] = useState(false);
 
   useEffect(() => {
-    if (!isAdmin) return;
-
-    const fetchRegistrationSetting = async () => {
-      const { data } = await supabase
-        .from('app_settings')
-        .select('value_boolean')
-        .eq('key', 'registration_enabled')
-        .maybeSingle();
-
-      setRegistrationEnabled(data?.value_boolean ?? true);
-    };
-
-    fetchRegistrationSetting();
+    if (isAdmin) {
+      setRegistrationEnabled(api.getSettings().registration_enabled);
+    }
   }, [isAdmin]);
 
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user) return;
     setPasswordLoading(true);
-    const { error } = await supabase.auth.updateUser({ password: newPassword });
-    if (error) toast.error(error.message);
-    else {
+    try {
+      api.updatePassword(user.id, newPassword);
       toast.success('Password updated');
       setNewPassword('');
+    } catch (err: any) {
+      toast.error(err.message);
     }
     setPasswordLoading(false);
   };
@@ -52,38 +41,27 @@ export default function SettingsPage() {
     const file = e.target.files?.[0];
     if (!file || !user) return;
     setLogoUploading(true);
-    const path = `${user.id}/logo.${file.name.split('.').pop()}`;
-    await supabase.storage.from('workspace-logos').upload(path, file, { upsert: true });
-    const { data } = supabase.storage.from('workspace-logos').getPublicUrl(path);
-    await supabase.from('profiles').update({ workspace_logo_url: data.publicUrl }).eq('id', user.id);
-    await refreshProfile();
-    toast.success('Logo updated');
+    try {
+      await api.uploadLogo(user.id, file);
+      refreshProfile();
+      toast.success('Logo updated');
+    } catch {
+      toast.error('Failed to upload logo');
+    }
     setLogoUploading(false);
   };
 
-  const handleAccentChange = async (color: string) => {
+  const handleAccentChange = (color: string) => {
     if (!user) return;
-    await supabase.from('profiles').update({ accent_color: color }).eq('id', user.id);
-    await refreshProfile();
+    api.updateProfile(user.id, { accentColor: color });
+    refreshProfile();
     toast.success('Accent color updated');
   };
 
-  const handleRegistrationToggle = async (enabled: boolean) => {
+  const handleRegistrationToggle = (enabled: boolean) => {
     setRegistrationEnabled(enabled);
-    setRegistrationLoading(true);
-
-    const { error } = await supabase
-      .from('app_settings')
-      .upsert({ key: 'registration_enabled', value_boolean: enabled }, { onConflict: 'key' });
-
-    if (error) {
-      toast.error(error.message);
-      setRegistrationEnabled(!enabled);
-    } else {
-      toast.success(enabled ? 'Registration enabled' : 'Registration disabled');
-    }
-
-    setRegistrationLoading(false);
+    api.updateSettings({ registration_enabled: enabled });
+    toast.success(enabled ? 'Registration enabled' : 'Registration disabled');
   };
 
   return (
@@ -98,12 +76,7 @@ export default function SettingsPage() {
               <p className="text-sm font-medium">Allow new user registration</p>
               <p className="text-xs text-muted-foreground">When disabled, only admins can create users from the Admin page.</p>
             </div>
-            <Switch
-              checked={registrationEnabled}
-              onCheckedChange={handleRegistrationToggle}
-              disabled={registrationLoading}
-              aria-label="Toggle registration"
-            />
+            <Switch checked={registrationEnabled} onCheckedChange={handleRegistrationToggle} aria-label="Toggle registration" />
           </div>
         </section>
       )}
@@ -151,7 +124,6 @@ export default function SettingsPage() {
           ))}
         </div>
       </section>
-
     </div>
   );
 }

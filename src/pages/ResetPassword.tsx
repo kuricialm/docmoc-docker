@@ -1,5 +1,4 @@
-import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -12,24 +11,12 @@ export default function ResetPassword() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    const hash = window.location.hash;
-    if (!hash.includes('type=recovery')) {
-      navigate('/login');
-    }
-  }, [navigate]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    const { error } = await supabase.auth.updateUser({ password });
-    if (error) {
-      toast.error(error.message);
-    } else {
-      toast.success('Password updated successfully');
-      navigate('/');
-    }
+    toast.info('Password reset is handled through the admin panel in self-hosted mode.');
     setLoading(false);
+    navigate('/login');
   };
 
   return (

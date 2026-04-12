@@ -4,8 +4,7 @@ import { FileText, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { getFileTypeInfo, formatFileSize, isImageType } from '@/lib/fileTypes';
 import FileTypeIcon from '@/components/FileTypeIcon';
-
-const FUNCTIONS_URL = `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1`;
+import * as api from '@/lib/api';
 
 export default function SharedDocument() {
   const { token } = useParams<{ token: string }>();
@@ -17,20 +16,17 @@ export default function SharedDocument() {
   useEffect(() => {
     const load = async () => {
       if (!token) return;
+      const shared = api.getSharedDocument(token);
+      if (!shared) { setLoading(false); return; }
+      setDoc(shared);
 
-      // Fetch document info via edge function
-      const infoRes = await fetch(`${FUNCTIONS_URL}/get-shared-file?token=${token}&mode=info`);
-      if (!infoRes.ok) { setLoading(false); return; }
-      const data = await infoRes.json();
-      setDoc(data);
-
-      const fileUrl = `${FUNCTIONS_URL}/get-shared-file?token=${token}`;
-
-      if (data.file_type === 'text/plain') {
-        const res = await fetch(fileUrl);
-        if (res.ok) setTextContent(await res.text());
-      } else if (data.file_type === 'application/pdf' || isImageType(data.file_type)) {
-        setPreviewUrl(fileUrl);
+      const blob = await api.getDocumentBlob(shared.storage_path);
+      if (blob) {
+        if (shared.file_type === 'text/plain') {
+          setTextContent(await blob.text());
+        } else if (shared.file_type === 'application/pdf' || isImageType(shared.file_type)) {
+          setPreviewUrl(URL.createObjectURL(blob));
+        }
       }
       setLoading(false);
     };
@@ -43,15 +39,11 @@ export default function SharedDocument() {
   const typeInfo = getFileTypeInfo(doc.file_type);
 
   const handleDownload = async () => {
-    const res = await fetch(`${FUNCTIONS_URL}/get-shared-file?token=${token}`);
-    if (!res.ok) return;
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = doc.name;
-    a.click();
-    URL.revokeObjectURL(url);
+    try {
+      await api.downloadDocument(doc.storage_path, doc.name);
+    } catch {
+      // noop
+    }
   };
 
   return (

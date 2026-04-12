@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import * as api from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,7 +14,6 @@ type UserProfile = {
   email: string;
   full_name: string | null;
   role: 'admin' | 'user';
-  document_count?: number;
 };
 
 export default function AdminPage() {
@@ -30,67 +29,37 @@ export default function AdminPage() {
   const [editUser, setEditUser] = useState<UserProfile | null>(null);
   const [editRole, setEditRole] = useState<'admin' | 'user'>('user');
 
-  const fetchUsers = async () => {
+  const fetchUsers = () => {
     setLoading(true);
-    const { data: profiles } = await supabase.from('profiles').select('*');
-    const { data: roles } = await supabase.from('user_roles').select('*');
-
-    if (profiles) {
-      const mapped: UserProfile[] = profiles.map((p) => {
-        const userRole = roles?.find((r) => r.user_id === p.id);
-        return {
-          id: p.id,
-          email: p.email,
-          full_name: p.full_name,
-          role: (userRole?.role as 'admin' | 'user') || 'user',
-        };
-      });
-      setUsers(mapped);
-    }
+    const all = api.getUsers();
+    setUsers(all.map((u) => ({ id: u.id, email: u.email, full_name: u.fullName, role: u.role })));
     setLoading(false);
   };
 
-  useEffect(() => {
-    if (isAdmin) fetchUsers();
-  }, [isAdmin]);
+  useEffect(() => { if (isAdmin) fetchUsers(); }, [isAdmin]);
 
   if (!isAdmin) return <p className="text-center py-20 text-muted-foreground">Access denied</p>;
 
-  const handleInvite = async (e: React.FormEvent) => {
+  const handleInvite = (e: React.FormEvent) => {
     e.preventDefault();
     setInviteLoading(true);
-
-    const { data, error } = await supabase.functions.invoke('admin-create-user', {
-      body: { email: inviteEmail, password: invitePassword, fullName: inviteName, role: inviteRole },
-    });
-
-    if (error) {
-      toast.error(error.message || 'Failed to create user');
-    } else {
+    try {
+      api.createUser(inviteEmail, invitePassword, inviteName || inviteEmail, inviteRole);
       toast.success('User created successfully');
       setShowInvite(false);
       setInviteEmail('');
       setInviteName('');
       setInvitePassword('');
       fetchUsers();
+    } catch (err: any) {
+      toast.error(err.message);
     }
     setInviteLoading(false);
   };
 
-  const handleRoleChange = async () => {
+  const handleRoleChange = () => {
     if (!editUser) return;
-    const { data: existing } = await supabase
-      .from('user_roles')
-      .select('id')
-      .eq('user_id', editUser.id)
-      .maybeSingle();
-
-    if (existing) {
-      await supabase.from('user_roles').update({ role: editRole }).eq('id', existing.id);
-    } else {
-      await supabase.from('user_roles').insert({ user_id: editUser.id, role: editRole });
-    }
-
+    api.updateUserRole(editUser.id, editRole);
     toast.success('Role updated');
     setEditUser(null);
     fetchUsers();
