@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import * as api from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -14,21 +14,24 @@ export default function Login() {
   const [fullName, setFullName] = useState('');
   const [loading, setLoading] = useState(false);
   const [registerMode, setRegisterMode] = useState(false);
+  const [settings, setSettings] = useState<api.AppSettings>({ registration_enabled: true });
 
-  const settings = api.getSettings();
+  useEffect(() => {
+    api.getSettings().then(setSettings).catch(() => {});
+  }, []);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
-      signIn(email, password);
+      await signIn(email, password);
     } catch (err: any) {
       toast.error(err.message);
     }
     setLoading(false);
   };
 
-  const handleRegister = (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!settings.registration_enabled) {
       toast.error('Registration is currently disabled');
@@ -36,7 +39,7 @@ export default function Login() {
     }
     setLoading(true);
     try {
-      api.createUser(email, password, fullName || email, 'user');
+      await api.registerUser(email, password, fullName || email);
       toast.success('Account created. You can now sign in.');
       setRegisterMode(false);
       setFullName('');

@@ -16,11 +16,11 @@ export default function SharedDocument() {
   useEffect(() => {
     const load = async () => {
       if (!token) return;
-      const shared = api.getSharedDocument(token);
+      const shared = await api.getSharedDocument(token);
       if (!shared) { setLoading(false); return; }
       setDoc(shared);
 
-      const blob = await api.getDocumentBlob(shared.storage_path);
+      const blob = await api.getSharedDocumentBlob(token);
       if (blob) {
         if (shared.file_type === 'text/plain') {
           setTextContent(await blob.text());
@@ -39,8 +39,16 @@ export default function SharedDocument() {
   const typeInfo = getFileTypeInfo(doc.file_type);
 
   const handleDownload = async () => {
+    // For shared docs, download via the shared endpoint
     try {
-      await api.downloadDocument(doc.storage_path, doc.name);
+      const blob = await api.getSharedDocumentBlob(token!);
+      if (!blob) throw new Error('Download failed');
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = doc.name;
+      a.click();
+      URL.revokeObjectURL(url);
     } catch {
       // noop
     }

@@ -29,10 +29,14 @@ export default function AdminPage() {
   const [editUser, setEditUser] = useState<UserProfile | null>(null);
   const [editRole, setEditRole] = useState<'admin' | 'user'>('user');
 
-  const fetchUsers = () => {
+  const fetchUsers = async () => {
     setLoading(true);
-    const all = api.getUsers();
-    setUsers(all.map((u) => ({ id: u.id, email: u.email, full_name: u.fullName, role: u.role })));
+    try {
+      const all = await api.getUsers();
+      setUsers(all.map((u) => ({ id: u.id, email: u.email, full_name: u.fullName, role: u.role })));
+    } catch (err: any) {
+      toast.error(err.message);
+    }
     setLoading(false);
   };
 
@@ -40,11 +44,11 @@ export default function AdminPage() {
 
   if (!isAdmin) return <p className="text-center py-20 text-muted-foreground">Access denied</p>;
 
-  const handleInvite = (e: React.FormEvent) => {
+  const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
     setInviteLoading(true);
     try {
-      api.createUser(inviteEmail, invitePassword, inviteName || inviteEmail, inviteRole);
+      await api.createUser(inviteEmail, invitePassword, inviteName || inviteEmail, inviteRole);
       toast.success('User created successfully');
       setShowInvite(false);
       setInviteEmail('');
@@ -57,12 +61,16 @@ export default function AdminPage() {
     setInviteLoading(false);
   };
 
-  const handleRoleChange = () => {
+  const handleRoleChange = async () => {
     if (!editUser) return;
-    api.updateUserRole(editUser.id, editRole);
-    toast.success('Role updated');
-    setEditUser(null);
-    fetchUsers();
+    try {
+      await api.updateUserRole(editUser.id, editRole);
+      toast.success('Role updated');
+      setEditUser(null);
+      fetchUsers();
+    } catch (err: any) {
+      toast.error(err.message);
+    }
   };
 
   return (

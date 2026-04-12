@@ -17,7 +17,7 @@ type AuthContextType = {
   isAdmin: boolean;
   profile: Profile | null;
   signOut: () => void;
-  signIn: (email: string, password: string) => void;
+  signIn: (email: string, password: string) => Promise<void>;
   refreshProfile: () => void;
 };
 
@@ -28,7 +28,7 @@ const AuthContext = createContext<AuthContextType>({
   isAdmin: false,
   profile: null,
   signOut: () => {},
-  signIn: () => {},
+  signIn: async () => {},
   refreshProfile: () => {},
 });
 
@@ -76,27 +76,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
 
   useEffect(() => {
-    const u = api.getCurrentUser();
-    setCurrentUser(u);
-    setProfile(u ? userToProfile(u) : null);
-    setLoading(false);
+    api.getCurrentUser().then((u) => {
+      setCurrentUser(u);
+      setProfile(u ? userToProfile(u) : null);
+      setLoading(false);
+    }).catch(() => setLoading(false));
   }, []);
 
-  const signIn = useCallback((email: string, password: string) => {
-    const u = api.login(email, password);
+  const signIn = useCallback(async (email: string, password: string) => {
+    const u = await api.login(email, password);
     setCurrentUser(u);
     setProfile(userToProfile(u));
   }, []);
 
-  const signOut = useCallback(() => {
-    api.signOut();
+  const signOut = useCallback(async () => {
+    await api.signOut();
     setCurrentUser(null);
     setProfile(null);
   }, []);
 
-  const refreshProfile = useCallback(() => {
+  const refreshProfile = useCallback(async () => {
     if (!currentUser) return;
-    const u = api.getProfile(currentUser.id);
+    const u = await api.getProfile(currentUser.id);
     if (u) {
       setCurrentUser(u);
       setProfile(userToProfile(u));

@@ -19,7 +19,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (isAdmin) {
-      setRegistrationEnabled(api.getSettings().registration_enabled);
+      api.getSettings().then((s) => setRegistrationEnabled(s.registration_enabled)).catch(() => {});
     }
   }, [isAdmin]);
 
@@ -28,7 +28,7 @@ export default function SettingsPage() {
     if (!user) return;
     setPasswordLoading(true);
     try {
-      api.updatePassword(user.id, newPassword);
+      await api.updatePassword(user.id, newPassword);
       toast.success('Password updated');
       setNewPassword('');
     } catch (err: any) {
@@ -51,17 +51,25 @@ export default function SettingsPage() {
     setLogoUploading(false);
   };
 
-  const handleAccentChange = (color: string) => {
+  const handleAccentChange = async (color: string) => {
     if (!user) return;
-    api.updateProfile(user.id, { accentColor: color });
-    refreshProfile();
-    toast.success('Accent color updated');
+    try {
+      await api.updateProfile(user.id, { accentColor: color });
+      refreshProfile();
+      toast.success('Accent color updated');
+    } catch {
+      toast.error('Failed to update accent color');
+    }
   };
 
-  const handleRegistrationToggle = (enabled: boolean) => {
+  const handleRegistrationToggle = async (enabled: boolean) => {
     setRegistrationEnabled(enabled);
-    api.updateSettings({ registration_enabled: enabled });
-    toast.success(enabled ? 'Registration enabled' : 'Registration disabled');
+    try {
+      await api.updateSettings({ registration_enabled: enabled });
+      toast.success(enabled ? 'Registration enabled' : 'Registration disabled');
+    } catch {
+      toast.error('Failed to update setting');
+    }
   };
 
   return (
