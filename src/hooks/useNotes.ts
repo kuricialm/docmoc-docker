@@ -6,7 +6,7 @@ export function useDocumentNote(documentId: string | undefined) {
   const { user } = useAuth();
   return useQuery({
     queryKey: ['document-note', documentId, user?.id],
-    queryFn: () => {
+    queryFn: async () => {
       if (!user || !documentId) return null;
       return api.getNote(documentId, user.id);
     },
@@ -21,7 +21,7 @@ export function useNoteMutations() {
   const upsertNote = useMutation({
     mutationFn: async ({ documentId, content }: { documentId: string; content: string }) => {
       if (!user) throw new Error('Not authenticated');
-      api.upsertNote(documentId, user.id, content);
+      await api.upsertNote(documentId, user.id, content);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['document-note'] }),
   });

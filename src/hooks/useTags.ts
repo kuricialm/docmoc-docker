@@ -34,7 +34,7 @@ export function useTagMutations() {
   const createTag = useMutation({
     mutationFn: async ({ name, color }: { name: string; color: string }) => {
       if (!user) throw new Error('Not authenticated');
-      api.createTag(user.id, name, color);
+      await api.createTag(user.id, name, color);
     },
     onSuccess: () => { invalidate(); toast.success('Tag created'); },
     onError: (e: Error) => toast.error(e.message),
@@ -42,21 +42,21 @@ export function useTagMutations() {
 
   const updateTag = useMutation({
     mutationFn: async ({ id, name, color }: { id: string; name: string; color: string }) => {
-      api.updateTag(id, name, color);
+      await api.updateTag(id, name, color);
     },
     onSuccess: () => { invalidate(); toast.success('Tag updated'); },
     onError: (e: Error) => toast.error(e.message),
   });
 
   const deleteTag = useMutation({
-    mutationFn: async (id: string) => { api.deleteTag(id); },
+    mutationFn: async (id: string) => { await api.deleteTag(id); },
     onSuccess: () => { invalidate(); toast.success('Tag deleted'); },
     onError: (e: Error) => toast.error(e.message),
   });
 
   const addTagToDocument = useMutation({
     mutationFn: async ({ documentId, tagId }: { documentId: string; tagId: string }) => {
-      api.addTagToDocument(documentId, tagId);
+      await api.addTagToDocument(documentId, tagId);
     },
     onSuccess: () => invalidate(),
     onError: (e: Error) => toast.error(e.message),
@@ -64,7 +64,7 @@ export function useTagMutations() {
 
   const removeTagFromDocument = useMutation({
     mutationFn: async ({ documentId, tagId }: { documentId: string; tagId: string }) => {
-      api.removeTagFromDocument(documentId, tagId);
+      await api.removeTagFromDocument(documentId, tagId);
     },
     onSuccess: () => invalidate(),
     onError: (e: Error) => toast.error(e.message),
