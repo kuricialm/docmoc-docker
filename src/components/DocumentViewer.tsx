@@ -23,6 +23,8 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [textContent, setTextContent] = useState<string | null>(null);
   const [noteText, setNoteText] = useState('');
+  const [optimisticStarred, setOptimisticStarred] = useState(false);
+  const [optimisticTags, setOptimisticTags] = useState<Document['tags']>([]);
   const { data: note } = useDocumentNote(doc?.id);
   const { upsertNote } = useNoteMutations();
   const { downloadDocument, toggleShare, toggleStar } = useDocumentMutations();
@@ -49,10 +51,16 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
     loadPreview();
   }, [doc, open]);
 
+  useEffect(() => {
+    if (!doc) return;
+    setOptimisticStarred(doc.starred);
+    setOptimisticTags(doc.tags || []);
+  }, [doc]);
+
   if (!doc) return null;
   const typeInfo = getFileTypeInfo(doc.file_type);
   const shareUrl = doc.shared && doc.share_token ? `${window.location.origin}/shared/${doc.share_token}` : null;
-  const docTagIds = doc.tags?.map((t) => t.id) || [];
+  const docTagIds = optimisticTags?.map((t) => t.id) || [];
   const availableTags = allTags?.filter((t) => !docTagIds.includes(t.id)) || [];
 
   const handleSaveNote = () => {
@@ -67,18 +75,58 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
     }
   };
 
+  const handleToggleStar = () => {
+    const nextStarred = !optimisticStarred;
+    setOptimisticStarred(nextStarred);
+    toggleStar.mutate(
+      { id: doc.id, starred: nextStarred },
+      { onError: () => setOptimisticStarred(!nextStarred) }
+    );
+  };
+
+  const handleAddTag = (tagId: string) => {
+    const tagToAdd = allTags?.find((tag) => tag.id === tagId);
+    if (!tagToAdd) return;
+
+    setOptimisticTags((prev) => [...(prev || []), tagToAdd]);
+    addTagToDocument.mutate(
+      { documentId: doc.id, tagId: tagToAdd.id },
+      {
+        onError: () => {
+          setOptimisticTags((prev) => (prev || []).filter((tag) => tag.id !== tagToAdd.id));
+        },
+      }
+    );
+  };
+
+  const handleRemoveTag = (tagId: string) => {
+    const removedTag = optimisticTags?.find((tag) => tag.id === tagId);
+    if (!removedTag) return;
+
+    setOptimisticTags((prev) => (prev || []).filter((tag) => tag.id !== tagId));
+    removeTagFromDocument.mutate(
+      { documentId: doc.id, tagId },
+      {
+        onError: () => {
+          setOptimisticTags((prev) => [...(prev || []), removedTag]);
+        },
+      }
+    );
+  };
+
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-5xl h-[80vh] flex flex-col p-0 gap-0 rounded-xl">
         <DialogHeader className="px-6 py-4 border-b shrink-0">
           <div className="flex items-center gap-3">
-            <DialogTitle className="text-base font-semibold truncate flex-1">{doc.name}</DialogTitle>
             <button
-              onClick={() => toggleStar.mutate({ id: doc.id, starred: !doc.starred })}
+              onClick={handleToggleStar}
               className="p-1.5 rounded-lg hover:bg-secondary transition-colors"
+              aria-label={optimisticStarred ? 'Unstar document' : 'Star document'}
             >
-              <Star className={`w-4 h-4 ${doc.starred ? 'text-amber-400 fill-amber-400' : 'text-muted-foreground/40'}`} />
+              <Star className={`w-4 h-4 ${optimisticStarred ? 'text-amber-400 fill-amber-400' : 'text-muted-foreground/40'}`} />
             </button>
+            <DialogTitle className="text-base font-semibold truncate flex-1">{doc.name}</DialogTitle>
           </div>
         </DialogHeader>
 
@@ -128,11 +176,11 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
             <div className="p-4 space-y-2 border-b">
               <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Tags</h3>
               <div className="flex flex-wrap gap-1.5 items-center">
-                {doc.tags?.map((tag) => (
+                {optimisticTags?.map((tag) => (
                   <span key={tag.id} className="inline-flex items-center gap-1 text-[11px] pl-2 pr-1 py-0.5 rounded-full font-medium transition-colors" style={{ backgroundColor: tag.color + '20', color: tag.color }}>
                     {tag.name}
                     <button
-                      onClick={() => removeTagFromDocument.mutate({ documentId: doc.id, tagId: tag.id })}
+                      onClick={() => handleRemoveTag(tag.id)}
                       className="p-0.5 rounded-full hover:bg-black/10 transition-colors"
                     >
                       <X className="w-2.5 h-2.5" />
@@ -150,7 +198,7 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
                       {availableTags.map((tag) => (
                         <button
                           key={tag.id}
-                          onClick={() => addTagToDocument.mutate({ documentId: doc.id, tagId: tag.id })}
+                          onClick={() => handleAddTag(tag.id)}
                           className="flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-sm hover:bg-secondary transition-colors"
                         >
                           <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: tag.color }} />

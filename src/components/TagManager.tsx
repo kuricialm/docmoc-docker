@@ -5,7 +5,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Plus, Pencil, Trash2, Check, X } from 'lucide-react';
 
-const TAG_COLORS = ['#3B82F6', '#EF4444', '#22C55E', '#F59E0B', '#8B5CF6', '#EC4899', '#06B6D4', '#F97316'];
+const TAG_COLORS = [
+  '#3B82F6', '#2563EB', '#6366F1', '#8B5CF6', '#A855F7', '#EC4899',
+  '#EF4444', '#F97316', '#F59E0B', '#EAB308', '#84CC16', '#22C55E',
+  '#10B981', '#14B8A6', '#06B6D4', '#0EA5E9', '#64748B', '#6B7280',
+];
 
 type Props = {
   open: boolean;
@@ -50,7 +54,7 @@ export default function TagManager({ open, onClose }: Props) {
             editingId === tag.id ? (
               <div key={tag.id} className="space-y-2 p-2 rounded-lg bg-secondary/50">
                 <Input value={editName} onChange={(e) => setEditName(e.target.value)} className="h-8 text-sm" autoFocus />
-                <div className="flex gap-1.5">
+                <div className="flex flex-wrap gap-1.5">
                   {TAG_COLORS.map((c) => (
                     <button key={c} onClick={() => setEditColor(c)} className="w-5 h-5 rounded-full border-2 transition-all" style={{ backgroundColor: c, borderColor: c === editColor ? 'hsl(var(--foreground))' : 'transparent' }} />
                   ))}
@@ -75,8 +79,8 @@ export default function TagManager({ open, onClose }: Props) {
           )}
 
           <div className="flex gap-2 pt-2 border-t">
-            <div className="flex gap-1 items-center">
-              {TAG_COLORS.slice(0, 4).map((c) => (
+            <div className="flex flex-wrap gap-1 items-center max-w-[140px]">
+              {TAG_COLORS.map((c) => (
                 <button key={c} onClick={() => setNewTagColor(c)} className="w-4 h-4 rounded-full border-2 transition-all" style={{ backgroundColor: c, borderColor: c === newTagColor ? 'hsl(var(--foreground))' : 'transparent' }} />
               ))}
             </div>
