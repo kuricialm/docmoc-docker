@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { FileText } from 'lucide-react';
 
 export default function Login() {
+  const { signIn } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
@@ -16,19 +17,18 @@ export default function Login() {
 
   const settings = api.getSettings();
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
-      api.login(email, password);
-      window.location.reload();
+      signIn(email, password);
     } catch (err: any) {
       toast.error(err.message);
     }
     setLoading(false);
   };
 
-  const handleRegister = async (e: React.FormEvent) => {
+  const handleRegister = (e: React.FormEvent) => {
     e.preventDefault();
     if (!settings.registration_enabled) {
       toast.error('Registration is currently disabled');
@@ -76,7 +76,7 @@ export default function Login() {
           </div>
           <div className="space-y-2">
             <Label htmlFor="password" className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Password</Label>
-            <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Enter your password" required minLength={6} className="h-11" />
+            <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Enter your password" required minLength={4} className="h-11" />
           </div>
           <Button type="submit" className="w-full h-11 font-medium" disabled={loading}>
             {loading ? 'Please wait...' : registerMode ? 'Create Account' : 'Sign In'}

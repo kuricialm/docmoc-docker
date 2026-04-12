@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
 import * as api from '@/lib/api';
 
 type Profile = {
@@ -17,6 +17,7 @@ type AuthContextType = {
   isAdmin: boolean;
   profile: Profile | null;
   signOut: () => void;
+  signIn: (email: string, password: string) => void;
   refreshProfile: () => void;
 };
 
@@ -27,6 +28,7 @@ const AuthContext = createContext<AuthContextType>({
   isAdmin: false,
   profile: null,
   signOut: () => {},
+  signIn: () => {},
   refreshProfile: () => {},
 });
 
@@ -73,29 +75,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<Profile | null>(null);
 
-  const load = () => {
+  useEffect(() => {
     const u = api.getCurrentUser();
     setCurrentUser(u);
     setProfile(u ? userToProfile(u) : null);
     setLoading(false);
-  };
+  }, []);
 
-  useEffect(() => { load(); }, []);
+  const signIn = useCallback((email: string, password: string) => {
+    const u = api.login(email, password);
+    setCurrentUser(u);
+    setProfile(userToProfile(u));
+  }, []);
 
-  const signOut = () => {
+  const signOut = useCallback(() => {
     api.signOut();
     setCurrentUser(null);
     setProfile(null);
-  };
+  }, []);
 
-  const refreshProfile = () => {
+  const refreshProfile = useCallback(() => {
     if (!currentUser) return;
     const u = api.getProfile(currentUser.id);
     if (u) {
       setCurrentUser(u);
       setProfile(userToProfile(u));
     }
-  };
+  }, [currentUser]);
 
   const user = currentUser ? { id: currentUser.id, email: currentUser.email } : null;
   const isAdmin = currentUser?.role === 'admin';
@@ -110,7 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [profile?.accent_color]);
 
   return (
-    <AuthContext.Provider value={{ user, session: !!user, loading, isAdmin, profile, signOut, refreshProfile }}>
+    <AuthContext.Provider value={{ user, session: !!user, loading, isAdmin, profile, signOut, signIn, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   );
