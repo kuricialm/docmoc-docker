@@ -63,8 +63,9 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: createError.message }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
-    // Assign role
+    // Assign role (replace default role created by trigger)
     if (newUser?.user) {
+      await adminClient.from('user_roles').delete().eq('user_id', newUser.user.id)
       await adminClient.from('user_roles').insert({
         user_id: newUser.user.id,
         role: role || 'user',

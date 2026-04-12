@@ -1,20 +1,40 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
 
 const ACCENT_COLORS = ['#3B82F6', '#6366F1', '#8B5CF6', '#EC4899', '#EF4444', '#F59E0B', '#22C55E', '#06B6D4'];
 
 export default function SettingsPage() {
-  const { user, profile, refreshProfile } = useAuth();
+  const { user, profile, refreshProfile, isAdmin } = useAuth();
 
   const [newPassword, setNewPassword] = useState('');
   const [passwordLoading, setPasswordLoading] = useState(false);
 
   const [logoUploading, setLogoUploading] = useState(false);
+
+  const [registrationEnabled, setRegistrationEnabled] = useState(true);
+  const [registrationLoading, setRegistrationLoading] = useState(false);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+
+    const fetchRegistrationSetting = async () => {
+      const { data } = await supabase
+        .from('app_settings')
+        .select('value_boolean')
+        .eq('key', 'registration_enabled')
+        .maybeSingle();
+
+      setRegistrationEnabled(data?.value_boolean ?? true);
+    };
+
+    fetchRegistrationSetting();
+  }, [isAdmin]);
 
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,9 +68,45 @@ export default function SettingsPage() {
     toast.success('Accent color updated');
   };
 
+  const handleRegistrationToggle = async (enabled: boolean) => {
+    setRegistrationEnabled(enabled);
+    setRegistrationLoading(true);
+
+    const { error } = await supabase
+      .from('app_settings')
+      .upsert({ key: 'registration_enabled', value_boolean: enabled }, { onConflict: 'key' });
+
+    if (error) {
+      toast.error(error.message);
+      setRegistrationEnabled(!enabled);
+    } else {
+      toast.success(enabled ? 'Registration enabled' : 'Registration disabled');
+    }
+
+    setRegistrationLoading(false);
+  };
+
   return (
     <div className="max-w-2xl space-y-8">
       <h2 className="text-lg font-semibold">Settings</h2>
+
+      {isAdmin && (
+        <section className="bg-card border rounded-lg p-6 space-y-4">
+          <h3 className="text-sm font-semibold">Access Control</h3>
+          <div className="flex items-center justify-between gap-4">
+            <div className="space-y-1">
+              <p className="text-sm font-medium">Allow new user registration</p>
+              <p className="text-xs text-muted-foreground">When disabled, only admins can create users from the Admin page.</p>
+            </div>
+            <Switch
+              checked={registrationEnabled}
+              onCheckedChange={handleRegistrationToggle}
+              disabled={registrationLoading}
+              aria-label="Toggle registration"
+            />
+          </div>
+        </section>
+      )}
 
       <section className="bg-card border rounded-lg p-6 space-y-4">
         <h3 className="text-sm font-semibold">Change Password</h3>
