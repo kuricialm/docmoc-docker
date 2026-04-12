@@ -4,5 +4,12 @@ services:
   docmoc:
     build: .
     ports:
-      - "3000:80"
+      - "3000:3001"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - ADMIN_EMAIL=admin@docmoc.local
+      - ADMIN_PASSWORD=admin
+      - TRASH_RETENTION_DAYS=30
+      - COOKIE_SECRET=change-me-in-production
     restart: unless-stopped
