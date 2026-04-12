@@ -1,42 +1,42 @@
 import { useState } from 'react';
-import { Document } from '@/hooks/useDocuments';
 import { useTags, useTagMutations } from '@/hooks/useTags';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Check, Plus, X } from 'lucide-react';
+import { Plus, Pencil, Trash2, Check, X } from 'lucide-react';
 
 const TAG_COLORS = ['#3B82F6', '#EF4444', '#22C55E', '#F59E0B', '#8B5CF6', '#EC4899', '#06B6D4', '#F97316'];
 
 type Props = {
-  document: Document | null;
   open: boolean;
   onClose: () => void;
 };
 
-export default function TagManager({ document: doc, open, onClose }: Props) {
+export default function TagManager({ open, onClose }: Props) {
   const { data: tags } = useTags();
-  const { createTag, addTagToDocument, removeTagFromDocument } = useTagMutations();
+  const { createTag, updateTag, deleteTag } = useTagMutations();
   const [newTagName, setNewTagName] = useState('');
   const [newTagColor, setNewTagColor] = useState(TAG_COLORS[0]);
-  const [showCreate, setShowCreate] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editColor, setEditColor] = useState('');
 
-  if (!doc) return null;
-  const docTagIds = doc.tags?.map((t) => t.id) || [];
-
-  const handleToggleTag = (tagId: string) => {
-    if (docTagIds.includes(tagId)) {
-      removeTagFromDocument.mutate({ documentId: doc.id, tagId });
-    } else {
-      addTagToDocument.mutate({ documentId: doc.id, tagId });
-    }
-  };
-
-  const handleCreateTag = () => {
+  const handleCreate = () => {
     if (!newTagName.trim()) return;
     createTag.mutate({ name: newTagName.trim(), color: newTagColor });
     setNewTagName('');
-    setShowCreate(false);
+  };
+
+  const startEdit = (tag: { id: string; name: string; color: string }) => {
+    setEditingId(tag.id);
+    setEditName(tag.name);
+    setEditColor(tag.color);
+  };
+
+  const saveEdit = () => {
+    if (!editingId || !editName.trim()) return;
+    updateTag.mutate({ id: editingId, name: editName.trim(), color: editColor });
+    setEditingId(null);
   };
 
   return (
@@ -45,51 +45,52 @@ export default function TagManager({ document: doc, open, onClose }: Props) {
         <DialogHeader>
           <DialogTitle className="text-base">Manage Tags</DialogTitle>
         </DialogHeader>
-        <div className="space-y-3">
-          {tags?.map((tag) => (
-            <button
-              key={tag.id}
-              onClick={() => handleToggleTag(tag.id)}
-              className="flex items-center gap-3 w-full p-2 rounded-md hover:bg-secondary transition-colors"
-            >
-              <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: tag.color }} />
-              <span className="text-sm flex-1 text-left">{tag.name}</span>
-              {docTagIds.includes(tag.id) && <Check className="w-4 h-4 text-primary" />}
-            </button>
-          ))}
-
-          {showCreate ? (
-            <div className="space-y-2 pt-2 border-t">
-              <Input
-                value={newTagName}
-                onChange={(e) => setNewTagName(e.target.value)}
-                placeholder="Tag name"
-                className="h-8 text-sm"
-                autoFocus
-              />
-              <div className="flex gap-1.5">
-                {TAG_COLORS.map((c) => (
-                  <button
-                    key={c}
-                    onClick={() => setNewTagColor(c)}
-                    className="w-6 h-6 rounded-full border-2 transition-all"
-                    style={{ backgroundColor: c, borderColor: c === newTagColor ? 'hsl(var(--foreground))' : 'transparent' }}
-                  />
-                ))}
+        <div className="space-y-2">
+          {tags?.map((tag) =>
+            editingId === tag.id ? (
+              <div key={tag.id} className="space-y-2 p-2 rounded-lg bg-secondary/50">
+                <Input value={editName} onChange={(e) => setEditName(e.target.value)} className="h-8 text-sm" autoFocus />
+                <div className="flex gap-1.5">
+                  {TAG_COLORS.map((c) => (
+                    <button key={c} onClick={() => setEditColor(c)} className="w-5 h-5 rounded-full border-2 transition-all" style={{ backgroundColor: c, borderColor: c === editColor ? 'hsl(var(--foreground))' : 'transparent' }} />
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={saveEdit} className="h-7 text-xs"><Check className="w-3 h-3 mr-1" />Save</Button>
+                  <Button size="sm" variant="ghost" onClick={() => setEditingId(null)} className="h-7 text-xs">Cancel</Button>
+                </div>
               </div>
-              <div className="flex gap-2">
-                <Button size="sm" onClick={handleCreateTag} className="flex-1">Create</Button>
-                <Button size="sm" variant="ghost" onClick={() => setShowCreate(false)}>Cancel</Button>
+            ) : (
+              <div key={tag.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-secondary/50 transition-colors group">
+                <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: tag.color }} />
+                <span className="text-sm flex-1">{tag.name}</span>
+                <button onClick={() => startEdit(tag)} className="p-1 rounded hover:bg-secondary opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Pencil className="w-3 h-3 text-muted-foreground" />
+                </button>
+                <button onClick={() => deleteTag.mutate(tag.id)} className="p-1 rounded hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Trash2 className="w-3 h-3 text-destructive" />
+                </button>
               </div>
-            </div>
-          ) : (
-            <button
-              onClick={() => setShowCreate(true)}
-              className="flex items-center gap-2 w-full p-2 rounded-md hover:bg-secondary transition-colors text-sm text-muted-foreground"
-            >
-              <Plus className="w-4 h-4" /> Create new tag
-            </button>
+            )
           )}
+
+          <div className="flex gap-2 pt-2 border-t">
+            <div className="flex gap-1 items-center">
+              {TAG_COLORS.slice(0, 4).map((c) => (
+                <button key={c} onClick={() => setNewTagColor(c)} className="w-4 h-4 rounded-full border-2 transition-all" style={{ backgroundColor: c, borderColor: c === newTagColor ? 'hsl(var(--foreground))' : 'transparent' }} />
+              ))}
+            </div>
+            <Input
+              value={newTagName}
+              onChange={(e) => setNewTagName(e.target.value)}
+              placeholder="New tag name..."
+              className="h-8 text-sm flex-1"
+              onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
+            />
+            <Button size="sm" onClick={handleCreate} className="h-8 shrink-0">
+              <Plus className="w-3.5 h-3.5" />
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

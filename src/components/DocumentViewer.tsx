@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
 import { Document } from '@/hooks/useDocuments';
 import { useDocumentNote, useNoteMutations } from '@/hooks/useNotes';
+import { useTags, useTagMutations } from '@/hooks/useTags';
 import { supabase } from '@/integrations/supabase/client';
 import { getFileTypeInfo, formatFileSize, isPreviewable, isImageType } from '@/lib/fileTypes';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { X, Download, Share2, ExternalLink, Copy } from 'lucide-react';
+import { X, Download, Share2, Copy, Star, Plus } from 'lucide-react';
 import FileTypeIcon from './FileTypeIcon';
 import { useDocumentMutations } from '@/hooks/useDocuments';
 import { toast } from 'sonner';
@@ -23,7 +25,9 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
   const [noteText, setNoteText] = useState('');
   const { data: note } = useDocumentNote(doc?.id);
   const { upsertNote } = useNoteMutations();
-  const { downloadDocument, toggleShare } = useDocumentMutations();
+  const { downloadDocument, toggleShare, toggleStar } = useDocumentMutations();
+  const { data: allTags } = useTags();
+  const { addTagToDocument, removeTagFromDocument } = useTagMutations();
 
   useEffect(() => {
     if (note) setNoteText(note.content);
@@ -47,8 +51,9 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
 
   if (!doc) return null;
   const typeInfo = getFileTypeInfo(doc.file_type);
-  const canPreview = isPreviewable(doc.file_type);
   const shareUrl = doc.shared && doc.share_token ? `${window.location.origin}/shared/${doc.share_token}` : null;
+  const docTagIds = doc.tags?.map((t) => t.id) || [];
+  const availableTags = allTags?.filter((t) => !docTagIds.includes(t.id)) || [];
 
   const handleSaveNote = () => {
     upsertNote.mutate({ documentId: doc.id, content: noteText });
@@ -64,23 +69,29 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-5xl h-[80vh] flex flex-col p-0 gap-0">
+      <DialogContent className="max-w-5xl h-[80vh] flex flex-col p-0 gap-0 rounded-xl">
         <DialogHeader className="px-6 py-4 border-b shrink-0">
-          <div className="flex items-center justify-between">
-            <DialogTitle className="text-base font-semibold truncate pr-4">{doc.name}</DialogTitle>
+          <div className="flex items-center gap-3">
+            <DialogTitle className="text-base font-semibold truncate flex-1">{doc.name}</DialogTitle>
+            <button
+              onClick={() => toggleStar.mutate({ id: doc.id, starred: !doc.starred })}
+              className="p-1.5 rounded-lg hover:bg-secondary transition-colors"
+            >
+              <Star className={`w-4 h-4 ${doc.starred ? 'text-amber-400 fill-amber-400' : 'text-muted-foreground/40'}`} />
+            </button>
           </div>
         </DialogHeader>
 
         <div className="flex-1 flex overflow-hidden">
           <div className="flex-1 bg-secondary/20 flex items-center justify-center overflow-auto p-4">
             {doc.file_type === 'application/pdf' && previewUrl ? (
-              <iframe src={previewUrl} className="w-full h-full rounded border" title="PDF Preview" />
+              <iframe src={previewUrl} className="w-full h-full rounded-lg border" title="PDF Preview" />
             ) : doc.file_type === 'text/plain' && textContent !== null ? (
-              <pre className="w-full h-full overflow-auto p-4 text-sm font-mono bg-card rounded border whitespace-pre-wrap">{textContent}</pre>
+              <pre className="w-full h-full overflow-auto p-4 text-sm font-mono bg-card rounded-lg border whitespace-pre-wrap">{textContent}</pre>
             ) : isImageType(doc.file_type) && previewUrl ? (
-              <img src={previewUrl} alt={doc.name} className="max-w-full max-h-full object-contain rounded" />
+              <img src={previewUrl} alt={doc.name} className="max-w-full max-h-full object-contain rounded-lg" />
             ) : (
-              <div className="text-center space-y-3">
+              <div className="flex flex-col items-center justify-center space-y-3">
                 <FileTypeIcon fileType={doc.file_type} size="lg" />
                 <p className="text-sm text-muted-foreground">Preview not available for this format</p>
                 <Button variant="outline" size="sm" onClick={() => downloadDocument(doc.storage_path, doc.name)}>
@@ -111,16 +122,45 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
                   <span>{new Date(doc.updated_at).toLocaleDateString()}</span>
                 </div>
               </div>
+            </div>
 
-              {doc.tags && doc.tags.length > 0 && (
-                <div className="flex flex-wrap gap-1 pt-1">
-                  {doc.tags.map((tag) => (
-                    <span key={tag.id} className="text-[10px] px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: tag.color + '20', color: tag.color }}>
-                      {tag.name}
-                    </span>
-                  ))}
-                </div>
-              )}
+            {/* Inline Tags */}
+            <div className="p-4 space-y-2 border-b">
+              <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Tags</h3>
+              <div className="flex flex-wrap gap-1.5 items-center">
+                {doc.tags?.map((tag) => (
+                  <span key={tag.id} className="inline-flex items-center gap-1 text-[11px] pl-2 pr-1 py-0.5 rounded-full font-medium transition-colors" style={{ backgroundColor: tag.color + '20', color: tag.color }}>
+                    {tag.name}
+                    <button
+                      onClick={() => removeTagFromDocument.mutate({ documentId: doc.id, tagId: tag.id })}
+                      className="p-0.5 rounded-full hover:bg-black/10 transition-colors"
+                    >
+                      <X className="w-2.5 h-2.5" />
+                    </button>
+                  </span>
+                ))}
+                {availableTags.length > 0 && (
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button className="w-6 h-6 rounded-full border border-dashed border-muted-foreground/30 flex items-center justify-center hover:border-primary hover:text-primary transition-colors">
+                        <Plus className="w-3 h-3" />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-48 p-1.5" align="start">
+                      {availableTags.map((tag) => (
+                        <button
+                          key={tag.id}
+                          onClick={() => addTagToDocument.mutate({ documentId: doc.id, tagId: tag.id })}
+                          className="flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-sm hover:bg-secondary transition-colors"
+                        >
+                          <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: tag.color }} />
+                          {tag.name}
+                        </button>
+                      ))}
+                    </PopoverContent>
+                  </Popover>
+                )}
+              </div>
             </div>
 
             <div className="p-4 space-y-3 border-b">

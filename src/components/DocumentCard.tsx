@@ -1,6 +1,6 @@
 import { Document, useDocumentMutations } from '@/hooks/useDocuments';
 import { getFileTypeInfo, formatFileSize } from '@/lib/fileTypes';
-import { Star, MoreVertical, Download, Edit2, Share2, Trash2, Eye } from 'lucide-react';
+import { Star, MoreVertical, Download, Edit2, Share2, Trash2, Eye, Tag } from 'lucide-react';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
@@ -11,16 +11,15 @@ type Props = {
   document: Document;
   onView: (doc: Document) => void;
   onRename: (doc: Document) => void;
-  onTagManage: (doc: Document) => void;
 };
 
-export default function DocumentCard({ document: doc, onView, onRename, onTagManage }: Props) {
+export default function DocumentCard({ document: doc, onView, onRename }: Props) {
   const { toggleStar, trashDocument, toggleShare, downloadDocument } = useDocumentMutations();
   const typeInfo = getFileTypeInfo(doc.file_type);
 
   return (
     <div
-      className="group bg-card border rounded-lg overflow-hidden hover:shadow-md hover:border-primary/20 transition-all cursor-pointer"
+      className="group bg-card border rounded-xl overflow-hidden hover:shadow-lg hover:border-primary/20 transition-all duration-200 cursor-pointer"
       onClick={() => onView(doc)}
     >
       <div className="h-36 bg-secondary/30 flex items-center justify-center relative">
@@ -28,7 +27,7 @@ export default function DocumentCard({ document: doc, onView, onRename, onTagMan
         <button
           onClick={(e) => { e.stopPropagation(); toggleStar.mutate({ id: doc.id, starred: !doc.starred }); }}
           className={cn(
-            'absolute top-2 right-2 p-1.5 rounded-md transition-all',
+            'absolute top-2 right-2 p-1.5 rounded-lg transition-all',
             doc.starred ? 'text-amber-400' : 'text-muted-foreground/40 opacity-0 group-hover:opacity-100',
             'hover:bg-black/5'
           )}
@@ -53,7 +52,7 @@ export default function DocumentCard({ document: doc, onView, onRename, onTagMan
           </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-              <button className="p-1 rounded hover:bg-secondary opacity-0 group-hover:opacity-100 transition-opacity">
+              <button className="p-1 rounded-lg hover:bg-secondary opacity-0 group-hover:opacity-100 transition-opacity">
                 <MoreVertical className="w-4 h-4 text-muted-foreground" />
               </button>
             </DropdownMenuTrigger>
@@ -69,9 +68,6 @@ export default function DocumentCard({ document: doc, onView, onRename, onTagMan
               </DropdownMenuItem>
               <DropdownMenuItem onClick={(e) => { e.stopPropagation(); toggleShare.mutate({ id: doc.id, shared: !doc.shared }); }} className="gap-2">
                 <Share2 className="w-3.5 h-3.5" /> {doc.shared ? 'Unshare' : 'Share'}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onTagManage(doc); }} className="gap-2">
-                <Star className="w-3.5 h-3.5" /> Manage Tags
               </DropdownMenuItem>
               <DropdownMenuItem onClick={(e) => { e.stopPropagation(); trashDocument.mutate(doc.id); }} className="gap-2 text-destructive">
                 <Trash2 className="w-3.5 h-3.5" /> Move to Trash

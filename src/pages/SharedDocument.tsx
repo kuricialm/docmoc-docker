@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
 import { FileText, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { getFileTypeInfo, formatFileSize, isPreviewable, isImageType } from '@/lib/fileTypes';
+import { getFileTypeInfo, formatFileSize, isImageType } from '@/lib/fileTypes';
 import FileTypeIcon from '@/components/FileTypeIcon';
+
+const FUNCTIONS_URL = `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1`;
 
 export default function SharedDocument() {
   const { token } = useParams<{ token: string }>();
@@ -16,23 +17,20 @@ export default function SharedDocument() {
   useEffect(() => {
     const load = async () => {
       if (!token) return;
-      const { data } = await supabase
-        .from('documents')
-        .select('*')
-        .eq('share_token', token)
-        .eq('shared', true)
-        .eq('trashed', false)
-        .maybeSingle();
 
-      if (data) {
-        setDoc(data);
-        if (data.file_type === 'text/plain') {
-          const { data: fileData } = await supabase.storage.from('documents').download(data.storage_path);
-          if (fileData) setTextContent(await fileData.text());
-        } else if (data.file_type === 'application/pdf' || isImageType(data.file_type)) {
-          const { data: urlData } = await supabase.storage.from('documents').createSignedUrl(data.storage_path, 3600);
-          if (urlData) setPreviewUrl(urlData.signedUrl);
-        }
+      // Fetch document info via edge function
+      const infoRes = await fetch(`${FUNCTIONS_URL}/get-shared-file?token=${token}&mode=info`);
+      if (!infoRes.ok) { setLoading(false); return; }
+      const data = await infoRes.json();
+      setDoc(data);
+
+      const fileUrl = `${FUNCTIONS_URL}/get-shared-file?token=${token}`;
+
+      if (data.file_type === 'text/plain') {
+        const res = await fetch(fileUrl);
+        if (res.ok) setTextContent(await res.text());
+      } else if (data.file_type === 'application/pdf' || isImageType(data.file_type)) {
+        setPreviewUrl(fileUrl);
       }
       setLoading(false);
     };
@@ -45,9 +43,10 @@ export default function SharedDocument() {
   const typeInfo = getFileTypeInfo(doc.file_type);
 
   const handleDownload = async () => {
-    const { data } = await supabase.storage.from('documents').download(doc.storage_path);
-    if (!data) return;
-    const url = URL.createObjectURL(data);
+    const res = await fetch(`${FUNCTIONS_URL}/get-shared-file?token=${token}`);
+    if (!res.ok) return;
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = doc.name;
@@ -75,7 +74,7 @@ export default function SharedDocument() {
             <p className="text-xs text-muted-foreground">{typeInfo.label} -- {formatFileSize(doc.file_size)}</p>
           </div>
         </div>
-        <div className="bg-card border rounded-lg overflow-hidden min-h-[60vh] flex items-center justify-center">
+        <div className="bg-card border rounded-xl overflow-hidden min-h-[60vh] flex items-center justify-center">
           {doc.file_type === 'application/pdf' && previewUrl ? (
             <iframe src={previewUrl} className="w-full h-[70vh]" title="PDF" />
           ) : doc.file_type === 'text/plain' && textContent !== null ? (
@@ -83,7 +82,7 @@ export default function SharedDocument() {
           ) : isImageType(doc.file_type) && previewUrl ? (
             <img src={previewUrl} alt={doc.name} className="max-w-full max-h-[70vh] object-contain" />
           ) : (
-            <div className="text-center space-y-3 py-20">
+            <div className="flex flex-col items-center justify-center space-y-3 py-20">
               <FileTypeIcon fileType={doc.file_type} size="lg" />
               <p className="text-sm text-muted-foreground">Preview not available</p>
               <Button variant="outline" size="sm" onClick={handleDownload}><Download className="w-3.5 h-3.5 mr-1.5" /> Download</Button>
