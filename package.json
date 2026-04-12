@@ -52,7 +52,6 @@
     "date-fns": "^3.6.0",
     "embla-carousel-react": "^8.6.0",
     "express": "^5.2.1",
-    "idb-keyval": "^6.2.2",
     "input-otp": "^1.4.2",
     "lucide-react": "^0.462.0",
     "multer": "^2.1.1",
