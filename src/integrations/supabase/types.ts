@@ -14,27 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      app_settings: {
-        Row: {
-          created_at: string
-          key: string
-          updated_at: string
-          value_boolean: boolean | null
-        }
-        Insert: {
-          created_at?: string
-          key: string
-          updated_at?: string
-          value_boolean?: boolean | null
-        }
-        Update: {
-          created_at?: string
-          key?: string
-          updated_at?: string
-          value_boolean?: boolean | null
-        }
-        Relationships: []
-      }
       document_notes: {
         Row: {
           content: string
