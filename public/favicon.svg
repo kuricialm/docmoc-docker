@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Document icon favicon">
+  <rect x="10" y="6" width="44" height="52" rx="6" fill="#1f2937"/>
+  <path d="M42 6v14h12" fill="#4b5563"/>
+  <path d="M42 6l12 14H42z" fill="#9ca3af"/>
+  <rect x="18" y="26" width="28" height="4" rx="2" fill="#f9fafb"/>
+  <rect x="18" y="34" width="28" height="4" rx="2" fill="#f9fafb"/>
+  <rect x="18" y="42" width="20" height="4" rx="2" fill="#f9fafb"/>
+</svg>
