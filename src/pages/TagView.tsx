@@ -13,9 +13,9 @@ import { Input } from '@/components/ui/input';
 import { Edit2, Trash2, X, Check } from 'lucide-react';
 import { toast } from 'sonner';
 
-type Props = { viewMode: 'grid' | 'list'; search: string };
+type Props = { viewMode: 'grid' | 'list'; onViewModeChange: (mode: 'grid' | 'list') => void; search: string };
 
-export default function TagView({ viewMode, search }: Props) {
+export default function TagView({ viewMode, onViewModeChange, search }: Props) {
   const { tagId } = useParams<{ tagId: string }>();
   const { data: tags = [] } = useTags();
   const { data: docs = [] } = useDocuments({ tagId });
@@ -81,6 +81,8 @@ export default function TagView({ viewMode, search }: Props) {
       </div>
 
       <DocumentBrowseToolbar
+        viewMode={viewMode}
+        onViewModeChange={onViewModeChange}
         dateFilter={dateFilter}
         onDateFilterChange={setDateFilter}
         sortBy={sortBy}

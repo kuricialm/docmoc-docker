@@ -1,7 +1,7 @@
 import { useAuth } from '@/contexts/AuthContext';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, LayoutGrid, List, Upload, LogOut, Settings, Menu, Moon, Sun } from 'lucide-react';
+import { Search, Upload, LogOut, Settings, Menu, Moon, Sun } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from 'next-themes';
 import {
@@ -13,8 +13,6 @@ import {
 } from '@/components/ui/dropdown-menu';
 
 type Props = {
-  viewMode: 'grid' | 'list';
-  onViewModeChange: (mode: 'grid' | 'list') => void;
   search: string;
   onSearchChange: (val: string) => void;
   onUpload: () => void;
@@ -22,7 +20,7 @@ type Props = {
   isMobile?: boolean;
 };
 
-export default function TopBar({ viewMode, onViewModeChange, search, onSearchChange, onUpload, onMenuToggle, isMobile }: Props) {
+export default function TopBar({ search, onSearchChange, onUpload, onMenuToggle, isMobile }: Props) {
   const { profile, signOut } = useAuth();
   const navigate = useNavigate();
   const { resolvedTheme, setTheme } = useTheme();
@@ -46,25 +44,6 @@ export default function TopBar({ viewMode, onViewModeChange, search, onSearchCha
       </div>
 
       <div className="flex items-center gap-1 ml-auto">
-        <div className="hidden sm:flex items-center bg-muted rounded-lg p-0.5">
-          <Button
-            variant="ghost"
-            size="icon"
-            className={`h-7 w-7 rounded-md ${viewMode === 'grid' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground'}`}
-            onClick={() => onViewModeChange('grid')}
-          >
-            <LayoutGrid className="w-3.5 h-3.5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className={`h-7 w-7 rounded-md ${viewMode === 'list' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground'}`}
-            onClick={() => onViewModeChange('list')}
-          >
-            <List className="w-3.5 h-3.5" />
-          </Button>
-        </div>
-
         <Button variant="ghost" size="icon" className="h-8 w-8 ml-1" onClick={() => setTheme(isDark ? 'light' : 'dark')}>
           {isDark ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-muted-foreground" />}
         </Button>

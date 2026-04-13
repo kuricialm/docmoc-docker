@@ -9,9 +9,9 @@ import RenameDialog from '@/components/RenameDialog';
 import DocumentBrowseToolbar from '@/components/DocumentBrowseToolbar';
 import { Star } from 'lucide-react';
 
-type Props = { viewMode: 'grid' | 'list'; search: string };
+type Props = { viewMode: 'grid' | 'list'; onViewModeChange: (mode: 'grid' | 'list') => void; search: string };
 
-export default function StarredPage({ viewMode, search }: Props) {
+export default function StarredPage({ viewMode, onViewModeChange, search }: Props) {
   const { data: docs = [] } = useDocuments({ starred: true });
   const { data: tags = [] } = useTags();
   const [viewDocId, setViewDocId] = useState<string | null>(null);
@@ -42,6 +42,8 @@ export default function StarredPage({ viewMode, search }: Props) {
       <h2 className="text-xl font-semibold tracking-tight">Starred</h2>
 
       <DocumentBrowseToolbar
+        viewMode={viewMode}
+        onViewModeChange={onViewModeChange}
         dateFilter={dateFilter}
         onDateFilterChange={setDateFilter}
         sortBy={sortBy}
