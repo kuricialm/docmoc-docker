@@ -1,34 +1,46 @@
 
+Goal: fully fix the runtime-data tracking issue and give you cleaned-up standard prompts that prevent it in future self-hosted Lovable apps.
 
-## Plan
+What I found
+- `.gitignore` does not currently include `data/`.
+- `.dockerignore` already does include `data/`.
+- That is why `git pull` still brings in `data/uploads/...pdf`: Git is still tracking runtime files in the repo, and `.dockerignore` does not affect Git tracking.
 
-### 1. Fix `.gitignore` — add `data/` exclusion
-Add `data/` to `.gitignore` so uploaded files, the SQLite database, and any runtime data are never committed to Git.
+Why this is happening
+- Ignoring a path only works for untracked files.
+- Because `data/` was already committed, Git will keep syncing it until it is removed from the index.
 
-### 2. Remove already-tracked `data/` from Git
-Run `git rm -r --cached data` equivalent — since we can't run git commands directly, the `.gitignore` addition will prevent future tracking, and I'll note the one-time cleanup command you need to run locally.
+Plan
+1. Update `.gitignore`
+- Add a clear runtime-data exclusion:
+```gitignore
+data/
+```
 
-### 3. Update `.dockerignore` — confirm `data/` is excluded
-The current `.dockerignore` doesn't list `data/` either, so Docker builds could copy runtime data into images. Add it there too.
+2. Keep `.dockerignore` aligned
+- Confirm `data/` remains excluded there so runtime files are not baked into Docker images.
 
-### 4. Deliver updated prompts
-Add a line to both prompts about excluding `data/` from version control.
-
----
-
-### Files to modify
-- `.gitignore` — add `data/` entry
-- `.dockerignore` — add `data/` entry
-
-### Manual step (you run once locally)
+3. Remove tracked runtime files from Git
+- The repo must be cleaned so `data/uploads/...pdf` stops appearing in pulls.
+- Required cleanup step:
 ```bash
 git rm -r --cached data
 git commit -m "Stop tracking runtime data directory"
 git push
 ```
 
-### Updated Prompt 1 — Rebuild
+4. Give you the final refined prompts
+- Keep them very close to your originals.
+- Add only the backend requirements we learned are critical:
+  - `server.cjs`
+  - proxy-aware cookie sessions
+  - `app.set('trust proxy', 1)`
+  - Vite dev proxy forwarding `x-forwarded-proto: 'https'`
+  - `/auth/me` verification after login
+  - `VITE_USE_EXTERNAL_BACKEND=true`
+  - `data/` must be excluded from both `.gitignore` and `.dockerignore`
 
+Updated Prompt 1 — Rebuild
 ```text
 Rebuild [App Name] without Supabase and without any hosted backend dependency.
 
@@ -76,8 +88,7 @@ Do not assume a hosted backend.
 Keep everything portable and simple.
 ```
 
-### Updated Prompt 2 — Dockerize
-
+Updated Prompt 2 — Dockerize
 ```text
 Dockerize this project based on its current working codebase.
 
@@ -102,3 +113,7 @@ After generating the files, briefly explain the install, build, and
 run commands used.
 ```
 
+Expected result after implementation
+- Future pulls will no longer include uploaded PDFs or database files.
+- Runtime data will stay on disk/NAS only.
+- Your standard rebuild and Docker prompts will explicitly guard against this issue going forward.
