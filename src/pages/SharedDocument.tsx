@@ -10,7 +10,7 @@ import { useTheme } from 'next-themes';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import { hasArabicCharacters } from '@/lib/text';
-import { resolveDisplayName } from '@/lib/identity';
+
 
 export default function SharedDocument() {
   const { token } = useParams<{ token: string }>();
