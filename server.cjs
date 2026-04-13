@@ -155,8 +155,23 @@ function cleanupExpiredShares(userId) {
 
 // ── Express app ──
 const app = express();
+app.set('trust proxy', 1);
 app.use(express.json());
 app.use(cookieParser(COOKIE_SECRET));
+
+// Cookie helper — adapts to secure (HTTPS / proxy) contexts for iframe/preview compat
+function sessionCookieOpts(req, maxAge) {
+  const isSecure = req.secure || req.headers['x-forwarded-proto'] === 'https';
+  const opts = { httpOnly: true, path: '/' };
+  if (isSecure) {
+    opts.secure = true;
+    opts.sameSite = 'none';
+  } else {
+    opts.sameSite = 'lax';
+  }
+  if (maxAge) opts.maxAge = maxAge;
+  return opts;
+}
 
 const upload = multer({ dest: path.join(DATA_DIR, 'tmp') });
 
@@ -193,16 +208,14 @@ app.post('/api/auth/login', (req, res) => {
   const token = uid();
   db.prepare('INSERT INTO sessions (token, user_id, created_at) VALUES (?,?,?)').run(token, user.id, now());
   const maxAge = rememberMe ? 30 * 86400000 : undefined; // 30 days or session-only
-  const cookieOpts = { httpOnly: true, sameSite: 'lax', path: '/' };
-  if (maxAge) cookieOpts.maxAge = maxAge;
-  res.cookie('session', token, cookieOpts);
+  res.cookie('session', token, sessionCookieOpts(req, maxAge));
   res.json({ id: user.id, email: user.email, fullName: user.full_name, role: user.role, accentColor: user.accent_color, avatarUrl: user.avatar_url, workspaceLogoUrl: getWorkspaceLogoUrl() });
 });
 
 app.post('/api/auth/logout', (req, res) => {
   const token = req.cookies.session;
   if (token) db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
-  res.clearCookie('session', { path: '/' });
+  res.clearCookie('session', sessionCookieOpts(req));
   res.json({ ok: true });
 });
 
@@ -267,7 +280,7 @@ app.patch('/api/profile/password', auth, (req, res) => {
   db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, req.user.id);
   // Clear all sessions for this user (force re-login)
   db.prepare('DELETE FROM sessions WHERE user_id = ?').run(req.user.id);
-  res.clearCookie('session', { path: '/' });
+  res.clearCookie('session', sessionCookieOpts(req));
   res.json({ ok: true });
 });
 
