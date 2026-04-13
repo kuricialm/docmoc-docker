@@ -7,6 +7,7 @@ import {
 import FileTypeIcon from './FileTypeIcon';
 import { cn } from '@/lib/utils';
 import { hasArabicCharacters } from '@/lib/text';
+import { Badge } from '@/components/ui/badge';
 
 type Props = {
   documents: Document[];
@@ -56,9 +57,13 @@ export default function DocumentListView({ documents, onView, onRename }: Props)
                     </div>
                   </td>
                   <td className="py-3 px-4">
-                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md" style={{ color: typeInfo.color, backgroundColor: typeInfo.bgColor }}>
+                    <Badge
+                      variant="secondary"
+                      className="text-[10px] font-semibold px-1.5 py-0 h-5 rounded-md border-0"
+                      style={{ color: typeInfo.color, backgroundColor: typeInfo.bgColor }}
+                    >
                       {typeInfo.label}
-                    </span>
+                    </Badge>
                   </td>
                   <td className="py-3 px-4 text-muted-foreground">{formatFileSize(doc.file_size)}</td>
                   <td className="py-3 px-4 text-muted-foreground hidden lg:table-cell">
@@ -112,9 +117,13 @@ export default function DocumentListView({ documents, onView, onRename }: Props)
                   {doc.name}
                 </p>
                 <div className="flex items-center gap-2 mt-0.5">
-                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md" style={{ color: typeInfo.color, backgroundColor: typeInfo.bgColor }}>
+                  <Badge
+                    variant="secondary"
+                    className="text-[10px] font-semibold px-1.5 py-0 h-5 rounded-md border-0"
+                    style={{ color: typeInfo.color, backgroundColor: typeInfo.bgColor }}
+                  >
                     {typeInfo.label}
-                  </span>
+                  </Badge>
                   <span className="text-[11px] text-muted-foreground">{formatFileSize(doc.file_size)}</span>
                 </div>
               </div>

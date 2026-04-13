@@ -9,6 +9,7 @@ import { hasArabicCharacters } from '@/lib/text';
 import FileTypeIcon from './FileTypeIcon';
 import DocumentThumbnail from './DocumentThumbnail';
 import { useLocalSettings } from '@/hooks/useLocalSettings';
+import { Badge } from '@/components/ui/badge';
 
 type Props = {
   document: Document;
@@ -46,9 +47,13 @@ export default function DocumentCard({ document: doc, onView, onRename }: Props)
               {doc.name}
             </p>
             <div className="flex items-center gap-2 mt-1.5">
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <Badge
+                variant="secondary"
+                className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0 h-5 rounded-md border-0"
+                style={{ color: typeInfo.color, backgroundColor: typeInfo.bgColor }}
+              >
                 {typeInfo.label}
-              </span>
+              </Badge>
               <span className="text-[11px] text-muted-foreground/70">{formatFileSize(doc.file_size)}</span>
             </div>
           </div>
