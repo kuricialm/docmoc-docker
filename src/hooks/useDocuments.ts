@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as api from '@/lib/api';
+import type { ShareConfig } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
@@ -15,6 +16,7 @@ export type Document = {
   trashed_at: string | null;
   shared: boolean;
   share_token: string | null;
+  share_expires_at?: string | null;
   created_at: string;
   updated_at: string;
   tags?: { id: string; name: string; color: string }[];
@@ -89,8 +91,8 @@ export function useDocumentMutations() {
   });
 
   const toggleShare = useMutation({
-    mutationFn: async ({ id, shared }: { id: string; shared: boolean }) => {
-      return await api.toggleShare(id, shared);
+    mutationFn: async ({ id, shared, config }: { id: string; shared: boolean; config?: ShareConfig }) => {
+      return await api.toggleShare(id, shared, config);
     },
     onSuccess: () => invalidate(),
     onError: (e: Error) => toast.error(e.message),

@@ -8,6 +8,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { X, Download, Share2, Copy, Star, Plus } from 'lucide-react';
 import FileTypeIcon from './FileTypeIcon';
 import { useDocumentMutations } from '@/hooks/useDocuments';
@@ -28,6 +31,10 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
   const [optimisticTags, setOptimisticTags] = useState<Document['tags']>([]);
   const [optimisticShared, setOptimisticShared] = useState(false);
   const [optimisticShareToken, setOptimisticShareToken] = useState<string | null>(null);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [shareMode, setShareMode] = useState<'public' | 'expires' | 'password'>('public');
+  const [expiresAt, setExpiresAt] = useState('');
+  const [sharePassword, setSharePassword] = useState('');
   const { data: note } = useDocumentNote(doc?.id);
   const { upsertNote } = useNoteMutations();
   const { downloadDocument, toggleShare, toggleStar } = useDocumentMutations();
@@ -119,17 +126,27 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
     );
   };
 
-  const handleToggleShare = () => {
-    const nextShared = !optimisticShared;
+  const handleToggleShare = (mode?: 'public' | 'expires' | 'password') => {
+    const nextShared = mode ? true : !optimisticShared;
     setOptimisticShared(nextShared);
     if (!nextShared) setOptimisticShareToken(null);
 
     toggleShare.mutate(
-      { id: doc.id, shared: nextShared },
+      {
+        id: doc.id,
+        shared: nextShared,
+        config: mode
+          ? { mode, expiresAt: mode === 'expires' ? expiresAt : undefined, password: mode === 'password' ? sharePassword : undefined }
+          : undefined,
+      },
       {
         onSuccess: (data: { share_token: string | null } | undefined) => {
           setOptimisticShared(nextShared);
           setOptimisticShareToken(data?.share_token ?? null);
+          if (mode) {
+            setShareDialogOpen(false);
+            toast.success('Share link generated');
+          }
         },
         onError: () => {
           setOptimisticShared(!nextShared);
@@ -139,8 +156,21 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
     );
   };
 
+  const handleCreateShareLink = () => {
+    if (shareMode === 'expires' && !expiresAt) {
+      toast.error('Please choose an expiration date and time');
+      return;
+    }
+    if (shareMode === 'password' && sharePassword.length < 4) {
+      toast.error('Password must be at least 4 characters');
+      return;
+    }
+    handleToggleShare(shareMode);
+  };
+
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+    <>
+      <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="w-[96vw] max-w-5xl h-[95vh] sm:h-[82vh] flex flex-col p-0 gap-0 rounded-xl border-border/50 shadow-xl">
         <DialogHeader className="px-4 sm:px-6 py-4 border-b border-border/40 shrink-0">
           <div className="flex items-center gap-3">
@@ -214,9 +244,15 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
                 <Button variant="outline" size="sm" className="justify-start gap-2 rounded-lg border-border/40" onClick={() => downloadDocument(doc.id, doc.name)}>
                   <Download className="w-3.5 h-3.5" /> Download
                 </Button>
-                <Button variant="outline" size="sm" className="justify-start gap-2 rounded-lg border-border/40" onClick={handleToggleShare}>
-                  <Share2 className="w-3.5 h-3.5" /> {optimisticShared ? 'Disable Sharing' : 'Share Link'}
-                </Button>
+                {optimisticShared ? (
+                  <Button variant="outline" size="sm" className="justify-start gap-2 rounded-lg border-border/40" onClick={() => handleToggleShare()}>
+                    <Share2 className="w-3.5 h-3.5" /> Disable Sharing
+                  </Button>
+                ) : (
+                  <Button variant="outline" size="sm" className="justify-start gap-2 rounded-lg border-border/40" onClick={() => setShareDialogOpen(true)}>
+                    <Share2 className="w-3.5 h-3.5" /> Share Link
+                  </Button>
+                )}
                 {shareUrl && (
                   <Button variant="ghost" size="sm" className="justify-start gap-2 text-xs text-muted-foreground rounded-lg" onClick={handleCopyLink}>
                     <Copy className="w-3.5 h-3.5" /> Copy link
@@ -234,5 +270,42 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
         </div>
       </DialogContent>
     </Dialog>
+      <Dialog open={shareDialogOpen} onOpenChange={setShareDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Choose sharing access</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <RadioGroup value={shareMode} onValueChange={(v) => setShareMode(v as 'public' | 'expires' | 'password')}>
+              <div className="flex items-start space-x-2 rounded-lg border p-3">
+                <RadioGroupItem value="public" id="share-public" className="mt-0.5" />
+                <div className="grid gap-1.5">
+                  <Label htmlFor="share-public">Public until manually disabled</Label>
+                </div>
+              </div>
+              <div className="flex items-start space-x-2 rounded-lg border p-3">
+                <RadioGroupItem value="expires" id="share-expires" className="mt-0.5" />
+                <div className="grid gap-1.5 w-full">
+                  <Label htmlFor="share-expires">Auto-disable at a specific time</Label>
+                  {shareMode === 'expires' && (
+                    <Input type="datetime-local" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} />
+                  )}
+                </div>
+              </div>
+              <div className="flex items-start space-x-2 rounded-lg border p-3">
+                <RadioGroupItem value="password" id="share-password" className="mt-0.5" />
+                <div className="grid gap-1.5 w-full">
+                  <Label htmlFor="share-password">Password protected</Label>
+                  {shareMode === 'password' && (
+                    <Input type="password" value={sharePassword} onChange={(e) => setSharePassword(e.target.value)} placeholder="Set a share password" minLength={4} />
+                  )}
+                </div>
+              </div>
+            </RadioGroup>
+            <Button className="w-full" onClick={handleCreateShareLink}>Generate share link</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

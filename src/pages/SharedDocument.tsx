@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { FileText, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { getFileTypeInfo, formatFileSize, isImageType } from '@/lib/fileTypes';
 import FileTypeIcon from '@/components/FileTypeIcon';
 import * as api from '@/lib/api';
@@ -12,28 +13,50 @@ export default function SharedDocument() {
   const [loading, setLoading] = useState(true);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [textContent, setTextContent] = useState<string | null>(null);
+  const [sharePassword, setSharePassword] = useState('');
+  const [submittedPassword, setSubmittedPassword] = useState('');
+  const [requiresPassword, setRequiresPassword] = useState(false);
 
   useEffect(() => {
     const load = async () => {
       if (!token) return;
-      const shared = await api.getSharedDocument(token);
-      if (!shared) { setLoading(false); return; }
-      setDoc(shared);
+      try {
+        const shared = await api.getSharedDocument(token, submittedPassword || undefined);
+        if (!shared) { setLoading(false); return; }
+        setDoc(shared);
 
-      const blob = await api.getSharedDocumentBlob(token);
-      if (blob) {
-        if (shared.file_type === 'text/plain') {
-          setTextContent(await blob.text());
-        } else if (shared.file_type === 'application/pdf' || isImageType(shared.file_type)) {
-          setPreviewUrl(URL.createObjectURL(blob));
+        const blob = await api.getSharedDocumentBlob(token, submittedPassword || undefined);
+        if (blob) {
+          if (shared.file_type === 'text/plain') {
+            setTextContent(await blob.text());
+          } else if (shared.file_type === 'application/pdf' || isImageType(shared.file_type)) {
+            setPreviewUrl(URL.createObjectURL(blob));
+          }
+        }
+        setRequiresPassword(false);
+      } catch (e) {
+        if (e instanceof Error && e.message === 'PASSWORD_REQUIRED') {
+          setRequiresPassword(true);
         }
       }
       setLoading(false);
-    };
-    load();
-  }, [token]);
+  };
+  load();
+  }, [token, submittedPassword]);
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><p className="text-muted-foreground text-sm">Loading...</p></div>;
+  if (requiresPassword) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6">
+        <div className="w-full max-w-sm space-y-3">
+          <h1 className="text-lg font-semibold">Password protected link</h1>
+          <p className="text-sm text-muted-foreground">Enter the share password to access this document.</p>
+          <Input type="password" value={sharePassword} onChange={(e) => setSharePassword(e.target.value)} placeholder="Share password" />
+          <Button className="w-full" onClick={() => { setSubmittedPassword(sharePassword); setLoading(true); }}>Unlock document</Button>
+        </div>
+      </div>
+    );
+  }
   if (!doc) return <div className="min-h-screen flex items-center justify-center"><p className="text-muted-foreground text-sm">Document not found or no longer shared</p></div>;
 
   const typeInfo = getFileTypeInfo(doc.file_type);
@@ -41,7 +64,7 @@ export default function SharedDocument() {
   const handleDownload = async () => {
     // For shared docs, download via the shared endpoint
     try {
-      const blob = await api.getSharedDocumentBlob(token!);
+      const blob = await api.getSharedDocumentBlob(token!, submittedPassword || undefined);
       if (!blob) throw new Error('Download failed');
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
