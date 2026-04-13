@@ -479,7 +479,7 @@ app.get('/api/documents', auth, (req, res) => {
   if (starred === 'true') { sql += ' AND starred = 1'; }
   if (shared === 'true') { sql += ' AND shared = 1'; }
 
-  const orderBy = sortBy === 'created' ? 'created_at' : 'updated_at';
+  const orderBy = sortBy === 'updated' ? 'updated_at' : 'created_at';
   sql += ` ORDER BY ${orderBy} DESC`;
   if (recent === 'true') {
     if (recentLimit !== undefined) {

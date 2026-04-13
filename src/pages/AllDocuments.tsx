@@ -1,5 +1,5 @@
-import { useState, useRef, useCallback, useMemo } from 'react';
-import { useDocuments, useDocumentMutations, Document } from '@/hooks/useDocuments';
+import { useState, useMemo } from 'react';
+import { useDocuments, Document } from '@/hooks/useDocuments';
 import { useTags } from '@/hooks/useTags';
 import { useDocumentBrowse } from '@/hooks/useDocumentBrowse';
 import DashboardStats from '@/components/DashboardStats';
@@ -9,8 +9,6 @@ import DocumentViewer from '@/components/DocumentViewer';
 import RenameDialog from '@/components/RenameDialog';
 import DocumentBrowseToolbar from '@/components/DocumentBrowseToolbar';
 import { FileText } from 'lucide-react';
-import { toast } from 'sonner';
-import { ACCEPTED_UPLOAD_ATTR, isAcceptedUploadFile } from '@/lib/fileTypes';
 
 type Props = {
   viewMode: 'grid' | 'list';

@@ -311,7 +311,7 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
       note_added: 'Added comment',
       note_updated: 'Edited comment',
     };
-    return map[action] || action.replaceAll('_', ' ');
+    return map[action] || action.split('_').join(' ');
   };
 
   return (
