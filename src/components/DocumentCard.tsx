@@ -5,6 +5,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
+import { hasArabicCharacters } from '@/lib/text';
 import FileTypeIcon from './FileTypeIcon';
 import DocumentThumbnail from './DocumentThumbnail';
 import { useLocalSettings } from '@/hooks/useLocalSettings';
@@ -41,7 +42,9 @@ export default function DocumentCard({ document: doc, onView, onRename }: Props)
       <div className="p-3.5 space-y-2">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium truncate leading-snug">{doc.name}</p>
+            <p className={cn('text-sm font-medium truncate leading-snug', hasArabicCharacters(doc.name) && 'font-arabic-text')} dir={hasArabicCharacters(doc.name) ? 'rtl' : 'ltr'}>
+              {doc.name}
+            </p>
             <div className="flex items-center gap-2 mt-1.5">
               <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                 {typeInfo.label}

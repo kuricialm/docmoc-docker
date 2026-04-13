@@ -92,6 +92,40 @@ function normalizeEmail(email) {
   return email.trim().toLowerCase();
 }
 
+function normalizeUploadedFilename(filename) {
+  if (typeof filename !== 'string') return 'document';
+  const trimmed = filename.trim();
+  if (!trimmed) return 'document';
+
+  const arabicRegex = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/g;
+  const mojibakeRegex = /[ÃØÙÐÑ][\u0080-\u00FF]?/g;
+  const matchCount = (value, regex) => (value.match(regex) || []).length;
+  const replacementCount = (value) => (value.match(/�/g) || []).length;
+  const printableCount = (value) => (value.match(/[\p{L}\p{N}\s._\-()[\]]/gu) || []).length;
+  const decodeLatin1ToUtf8 = (value) => Buffer.from(value, 'latin1').toString('utf8');
+  const hasMojibakeHints = (value) => matchCount(value, mojibakeRegex) >= 3;
+
+  const candidates = [trimmed];
+  const firstPass = decodeLatin1ToUtf8(trimmed);
+  candidates.push(firstPass);
+  const secondPass = decodeLatin1ToUtf8(firstPass);
+  if (secondPass !== firstPass) candidates.push(secondPass);
+  if (hasMojibakeHints(trimmed) && /[\r\n]/.test(trimmed)) {
+    const controlRecovered = trimmed.replace(/\r\n|\r|\n/g, '\x85');
+    candidates.push(decodeLatin1ToUtf8(controlRecovered));
+  }
+
+  const score = (value) => (
+    matchCount(value, arabicRegex) * 4 +
+    printableCount(value) -
+    matchCount(value, mojibakeRegex) * 3 -
+    replacementCount(value) * 6
+  );
+
+  const best = candidates.sort((a, b) => score(b) - score(a))[0];
+  return best || 'document';
+}
+
 function isValidPassword(password) {
   return typeof password === 'string' && password.length >= 4;
 }
@@ -431,6 +465,7 @@ app.get('/api/documents', auth, (req, res) => {
     const { share_password_hash, ...rest } = d;
     return ({
     ...rest,
+    name: normalizeUploadedFilename(rest.name),
     starred: !!d.starred,
     trashed: !!d.trashed,
     shared: !!d.shared,
@@ -457,7 +492,7 @@ app.post('/api/documents/upload', auth, upload.single('file'), (req, res) => {
   fs.renameSync(req.file.path, path.join(DATA_DIR, storagePath));
 
   const doc = {
-    id, user_id: req.user.id, name: req.file.originalname,
+    id, user_id: req.user.id, name: normalizeUploadedFilename(req.file.originalname),
     file_type: req.file.mimetype || 'application/octet-stream',
     file_size: req.file.size, storage_path: storagePath,
     starred: 0, trashed: 0, trashed_at: null, shared: 0, share_token: null,
@@ -469,7 +504,7 @@ app.post('/api/documents/upload', auth, upload.single('file'), (req, res) => {
     .run(doc.id, doc.user_id, doc.name, doc.file_type, doc.file_size, doc.storage_path,
       doc.starred, doc.trashed, doc.trashed_at, doc.shared, doc.share_token, doc.created_at, doc.updated_at);
 
-  res.json({ ...doc, starred: false, trashed: false, shared: false, tags: [], tag_ids: [] });
+  res.json({ ...doc, name: normalizeUploadedFilename(doc.name), starred: false, trashed: false, shared: false, tags: [], tag_ids: [] });
 });
 
 app.patch('/api/documents/:id/rename', auth, (req, res) => {
@@ -546,7 +581,8 @@ app.get('/api/documents/:id/download', auth, (req, res) => {
   const doc = db.prepare('SELECT * FROM documents WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
   if (!doc) return res.status(404).json({ error: 'Not found' });
   const filePath = path.join(DATA_DIR, doc.storage_path);
-  res.setHeader('Content-Disposition', `attachment; filename="${doc.name}"`);
+  const safeName = normalizeUploadedFilename(doc.name);
+  res.setHeader('Content-Disposition', `attachment; filename="${safeName}"`);
   res.setHeader('Content-Type', doc.file_type);
   res.sendFile(filePath);
 });
@@ -641,7 +677,7 @@ app.get('/api/shared/:token', (req, res) => {
     SELECT t.id, t.name, t.color FROM tags t
     JOIN document_tags dt ON dt.tag_id = t.id WHERE dt.document_id = ?
   `).all(doc.id);
-  res.json({ ...doc, starred: !!doc.starred, trashed: false, shared: true, tags });
+  res.json({ ...doc, name: normalizeUploadedFilename(doc.name), starred: !!doc.starred, trashed: false, shared: true, tags });
 });
 
 app.get('/api/shared/:token/download', (req, res) => {

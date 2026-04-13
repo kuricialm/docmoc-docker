@@ -6,6 +6,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import FileTypeIcon from './FileTypeIcon';
 import { cn } from '@/lib/utils';
+import { hasArabicCharacters } from '@/lib/text';
 
 type Props = {
   documents: Document[];
@@ -43,7 +44,9 @@ export default function DocumentListView({ documents, onView, onRename }: Props)
                   <td className="py-3 px-4">
                     <div className="flex items-center gap-3">
                       <FileTypeIcon fileType={doc.file_type} size="sm" />
-                      <span className="font-medium truncate max-w-[200px]">{doc.name}</span>
+                      <span className={cn('font-medium truncate max-w-[200px]', hasArabicCharacters(doc.name) && 'font-arabic-text')} dir={hasArabicCharacters(doc.name) ? 'rtl' : 'ltr'}>
+                        {doc.name}
+                      </span>
                       <button
                         onClick={(e) => { e.stopPropagation(); toggleStar.mutate({ id: doc.id, starred: !doc.starred }); }}
                         className={cn('shrink-0 transition-all duration-150', doc.starred ? 'text-amber-400' : 'text-muted-foreground/20 opacity-0 group-hover:opacity-100')}
@@ -105,7 +108,9 @@ export default function DocumentListView({ documents, onView, onRename }: Props)
             >
               <FileTypeIcon fileType={doc.file_type} size="sm" />
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">{doc.name}</p>
+                <p className={cn('text-sm font-medium truncate', hasArabicCharacters(doc.name) && 'font-arabic-text')} dir={hasArabicCharacters(doc.name) ? 'rtl' : 'ltr'}>
+                  {doc.name}
+                </p>
                 <div className="flex items-center gap-2 mt-0.5">
                   <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md" style={{ color: typeInfo.color, backgroundColor: typeInfo.bgColor }}>
                     {typeInfo.label}
