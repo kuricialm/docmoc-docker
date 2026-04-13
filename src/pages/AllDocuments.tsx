@@ -5,6 +5,7 @@ import DocumentCard from '@/components/DocumentCard';
 import DocumentListView from '@/components/DocumentListView';
 import DocumentViewer from '@/components/DocumentViewer';
 import RenameDialog from '@/components/RenameDialog';
+import { FileText } from 'lucide-react';
 
 type Props = {
   viewMode: 'grid' | 'list';
@@ -36,16 +37,17 @@ export default function AllDocuments({ viewMode, search, uploadTrigger }: Props)
   }, [uploadDocument]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-page-in">
       <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileChange} id="file-upload" />
       <DashboardStats documents={[...allDocs, ...trashedDocs]} />
       {filtered.length === 0 ? (
         <div className="text-center py-20">
+          <FileText className="w-10 h-10 text-muted-foreground/20 mx-auto mb-3" />
           <p className="text-muted-foreground text-sm">No documents yet</p>
-          <p className="text-xs text-muted-foreground/60 mt-1">Upload your first document to get started</p>
+          <p className="text-xs text-muted-foreground/50 mt-1">Upload your first document to get started</p>
         </div>
       ) : viewMode === 'grid' ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
           {filtered.map((doc) => (
             <DocumentCard key={doc.id} document={doc} onView={(selected) => setViewDocId(selected.id)} onRename={setRenameDoc} />
           ))}

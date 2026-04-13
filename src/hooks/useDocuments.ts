@@ -90,7 +90,7 @@ export function useDocumentMutations() {
 
   const toggleShare = useMutation({
     mutationFn: async ({ id, shared }: { id: string; shared: boolean }) => {
-      await api.toggleShare(id, shared);
+      return await api.toggleShare(id, shared);
     },
     onSuccess: () => invalidate(),
     onError: (e: Error) => toast.error(e.message),

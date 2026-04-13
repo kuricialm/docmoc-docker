@@ -21,9 +21,7 @@ export default function SettingsPage() {
   const [logoUploading, setLogoUploading] = useState(false);
   const [registrationEnabled, setRegistrationEnabled] = useState(true);
 
-  useEffect(() => {
-    setNewEmail(user?.email ?? '');
-  }, [user?.email]);
+  useEffect(() => { setNewEmail(user?.email ?? ''); }, [user?.email]);
 
   useEffect(() => {
     if (isAdmin) {
@@ -39,9 +37,7 @@ export default function SettingsPage() {
       await api.updatePassword(user.id, newPassword);
       toast.success('Password updated');
       setNewPassword('');
-    } catch (err: any) {
-      toast.error(err.message);
-    }
+    } catch (err: any) { toast.error(err.message); }
     setPasswordLoading(false);
   };
 
@@ -49,23 +45,14 @@ export default function SettingsPage() {
     e.preventDefault();
     if (!user) return;
     const normalizedEmail = newEmail.trim().toLowerCase();
-    if (!normalizedEmail) {
-      toast.error('Email is required');
-      return;
-    }
-    if (normalizedEmail === user.email) {
-      toast.message('Email is already up to date');
-      return;
-    }
-
+    if (!normalizedEmail) { toast.error('Email is required'); return; }
+    if (normalizedEmail === user.email) { toast.message('Email is already up to date'); return; }
     setEmailLoading(true);
     try {
       await api.updateEmail(user.id, normalizedEmail);
       await refreshProfile();
       toast.success('Email updated');
-    } catch (err: any) {
-      toast.error(err.message);
-    }
+    } catch (err: any) { toast.error(err.message); }
     setEmailLoading(false);
   };
 
@@ -77,9 +64,7 @@ export default function SettingsPage() {
       await api.uploadLogo(user.id, file);
       refreshProfile();
       toast.success('Logo updated');
-    } catch {
-      toast.error('Failed to upload logo');
-    }
+    } catch { toast.error('Failed to upload logo'); }
     setLogoUploading(false);
   };
 
@@ -89,9 +74,7 @@ export default function SettingsPage() {
       await api.updateProfile(user.id, { accentColor: color });
       refreshProfile();
       toast.success('Accent color updated');
-    } catch {
-      toast.error('Failed to update accent color');
-    }
+    } catch { toast.error('Failed to update accent color'); }
   };
 
   const handleRegistrationToggle = async (enabled: boolean) => {
@@ -99,95 +82,99 @@ export default function SettingsPage() {
     try {
       await api.updateSettings({ registration_enabled: enabled });
       toast.success(enabled ? 'Registration enabled' : 'Registration disabled');
-    } catch {
-      toast.error('Failed to update setting');
-    }
+    } catch { toast.error('Failed to update setting'); }
   };
 
+  const Section = ({ children, className = '' }: { children: React.ReactNode; className?: string }) => (
+    <section className={`bg-card border border-border/50 rounded-xl p-5 sm:p-6 space-y-4 hover:border-border/80 transition-colors duration-200 ${className}`}>
+      {children}
+    </section>
+  );
+
   return (
-    <div className="max-w-2xl space-y-8">
-      <h2 className="text-lg font-semibold">Settings</h2>
+    <div className="max-w-2xl space-y-5 animate-page-in">
+      <h2 className="text-xl font-semibold tracking-tight">Settings</h2>
 
       {isAdmin && (
-        <section className="bg-card border rounded-lg p-6 space-y-4">
+        <Section>
           <h3 className="text-sm font-semibold">Access Control</h3>
           <div className="flex items-center justify-between gap-4">
             <div className="space-y-1">
               <p className="text-sm font-medium">Allow new user registration</p>
-              <p className="text-xs text-muted-foreground">When disabled, only admins can create users from the Admin page.</p>
+              <p className="text-xs text-muted-foreground/80">When disabled, only admins can create users from the Admin page.</p>
             </div>
             <Switch checked={registrationEnabled} onCheckedChange={handleRegistrationToggle} aria-label="Toggle registration" />
           </div>
-        </section>
+        </Section>
       )}
 
-      <section className="bg-card border rounded-lg p-6 space-y-4">
+      <Section>
         <h3 className="text-sm font-semibold">Change Email</h3>
         <form onSubmit={handleEmailChange} className="space-y-3">
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">New Email</Label>
-            <Input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="Enter new email" required className="h-9" />
+            <Input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="Enter new email" required className="h-10 rounded-lg" />
           </div>
-          <Button type="submit" size="sm" disabled={emailLoading}>
+          <Button type="submit" size="sm" className="rounded-lg" disabled={emailLoading}>
             {emailLoading ? 'Updating...' : 'Update Email'}
           </Button>
         </form>
-      </section>
+      </Section>
 
-      <section className="bg-card border rounded-lg p-6 space-y-4">
+      <Section>
         <h3 className="text-sm font-semibold">Change Password</h3>
         <form onSubmit={handlePasswordChange} className="space-y-3">
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">New Password</Label>
-            <Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Enter new password" required minLength={6} className="h-9" />
+            <Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Enter new password" required minLength={6} className="h-10 rounded-lg" />
           </div>
-          <Button type="submit" size="sm" disabled={passwordLoading}>
+          <Button type="submit" size="sm" className="rounded-lg" disabled={passwordLoading}>
             {passwordLoading ? 'Updating...' : 'Update Password'}
           </Button>
         </form>
-      </section>
+      </Section>
 
-      <section className="bg-card border rounded-lg p-6 space-y-4">
+      <Section>
         <h3 className="text-sm font-semibold">Workspace Logo</h3>
         <div className="flex items-center gap-4">
           {profile?.workspace_logo_url ? (
-            <img src={profile.workspace_logo_url} alt="Logo" className="w-12 h-12 rounded-lg object-cover border" />
+            <img src={profile.workspace_logo_url} alt="Logo" className="w-12 h-12 rounded-xl object-cover border border-border/50" />
           ) : (
-            <div className="w-12 h-12 rounded-lg bg-secondary flex items-center justify-center text-muted-foreground text-xs">No logo</div>
+            <div className="w-12 h-12 rounded-xl bg-secondary/50 flex items-center justify-center text-muted-foreground text-xs">No logo</div>
           )}
           <div>
             <input type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" id="logo-upload" />
-            <Button variant="outline" size="sm" onClick={() => document.getElementById('logo-upload')?.click()} disabled={logoUploading}>
+            <Button variant="outline" size="sm" className="rounded-lg" onClick={() => document.getElementById('logo-upload')?.click()} disabled={logoUploading}>
               {logoUploading ? 'Uploading...' : 'Upload Logo'}
             </Button>
           </div>
         </div>
-      </section>
+      </Section>
 
-      <section className="bg-card border rounded-lg p-6 space-y-4">
+      <Section>
         <h3 className="text-sm font-semibold">Appearance</h3>
         <div className="flex items-center justify-between gap-4">
           <div className="space-y-1">
             <p className="text-sm font-medium">Dark mode</p>
-            <p className="text-xs text-muted-foreground">Use a darker color palette across the app.</p>
+            <p className="text-xs text-muted-foreground/80">Use a darker color palette across the app.</p>
           </div>
           <Switch checked={resolvedTheme === 'dark'} onCheckedChange={(checked) => setTheme(checked ? 'dark' : 'light')} />
         </div>
-      </section>
+      </Section>
 
-      <section className="bg-card border rounded-lg p-6 space-y-4">
+      <Section>
         <h3 className="text-sm font-semibold">Accent Color</h3>
-        <div className="flex gap-2">
+        <div className="flex gap-2.5">
           {ACCENT_COLORS.map((c) => (
             <button
               key={c}
               onClick={() => handleAccentChange(c)}
-              className="w-8 h-8 rounded-full border-2 transition-all hover:scale-110"
+              className="w-8 h-8 rounded-full border-2 transition-all duration-150 hover:scale-110 active:scale-95"
               style={{ backgroundColor: c, borderColor: profile?.accent_color === c ? 'hsl(var(--foreground))' : 'transparent' }}
             />
           ))}
         </div>
-      </section>
+      </Section>
     </div>
   );
 }

@@ -38,11 +38,11 @@ export default function AppSidebar({
 
   return (
     <>
-      {isMobile && mobileOpen && <div className="fixed inset-0 bg-black/50 z-30" onClick={onMobileClose} />}
+      {isMobile && mobileOpen && <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-30 transition-opacity" onClick={onMobileClose} />}
       <aside
         aria-hidden={isMobile ? !mobileOpen : undefined}
         className={cn(
-          'h-screen flex flex-col border-r transition-all duration-200 shrink-0',
+          'h-screen flex flex-col border-r transition-all duration-250 ease-out shrink-0',
           isMobile
             ? cn(
               'fixed top-0 left-0 z-40 w-[85vw] max-w-72',
@@ -52,13 +52,13 @@ export default function AppSidebar({
         )}
         style={{ backgroundColor: 'hsl(var(--sidebar-bg))', borderColor: 'hsl(var(--sidebar-border))' }}
       >
-        <div className="h-14 flex items-center px-4 gap-2 shrink-0">
+        <div className="h-14 flex items-center px-4 gap-2.5 shrink-0">
           {!collapsed && (
             <>
               {profile?.workspace_logo_url ? (
-                <img src={profile.workspace_logo_url} alt="Logo" className="w-7 h-7 rounded-md object-cover" />
+                <img src={profile.workspace_logo_url} alt="Logo" className="w-7 h-7 rounded-lg object-cover" />
               ) : (
-                <div className="w-7 h-7 rounded-md bg-primary flex items-center justify-center">
+                <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center">
                   <FileText className="w-4 h-4 text-primary-foreground" />
                 </div>
               )}
@@ -67,13 +67,13 @@ export default function AppSidebar({
           )}
           <button
             onClick={onToggle}
-            className={cn('p-1 rounded hover:bg-white/10 transition-colors ml-auto', collapsed && 'mx-auto')}
+            className={cn('p-1.5 rounded-lg hover:bg-white/10 transition-colors duration-150 ml-auto', collapsed && 'mx-auto')}
           >
-            <ChevronLeft className={cn('w-4 h-4 text-white/60 transition-transform', collapsed && 'rotate-180')} />
+            <ChevronLeft className={cn('w-4 h-4 text-white/50 transition-transform duration-200', collapsed && 'rotate-180')} />
           </button>
         </div>
 
-        <nav className="flex-1 overflow-y-auto px-2 py-2 space-y-0.5">
+        <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5">
           {navItems.map((item) => {
             const active = location.pathname === item.path;
             return (
@@ -82,11 +82,11 @@ export default function AppSidebar({
                 to={item.path}
                 onClick={() => isMobile && onMobileClose?.()}
                 className={cn(
-                  'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
+                  'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-150',
                   active
-                    ? 'bg-white/10 text-white font-medium'
-                    : 'text-white/60 hover:text-white hover:bg-white/5',
-                  collapsed && 'justify-center px-0',
+                    ? 'bg-white/10 text-white font-medium shadow-sm shadow-white/5 border-l-2 border-primary ml-0 pl-[10px]'
+                    : 'text-white/55 hover:text-white/90 hover:bg-white/[0.06] border-l-2 border-transparent ml-0 pl-[10px]',
+                  collapsed && 'justify-center px-0 border-l-0 pl-0',
                 )}
                 title={collapsed ? item.label : undefined}
               >
@@ -97,15 +97,15 @@ export default function AppSidebar({
           })}
 
           {!collapsed && (
-            <div className="mt-6 px-3">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-[10px] uppercase tracking-widest text-white/30 font-medium">Tags</p>
+            <div className="mt-7 px-3">
+              <div className="flex items-center justify-between mb-2.5">
+                <p className="text-[10px] uppercase tracking-widest text-white/25 font-medium">Tags</p>
                 <button
                   onClick={() => setTagManagerOpen(true)}
-                  className="p-1 rounded hover:bg-white/10 transition-colors"
+                  className="p-1 rounded-md hover:bg-white/10 transition-colors duration-150"
                   title="Manage Tags"
                 >
-                  <Tags className="w-3 h-3 text-white/40 hover:text-white/70" />
+                  <Tags className="w-3 h-3 text-white/35 hover:text-white/60" />
                 </button>
               </div>
               <div className="space-y-0.5">
@@ -117,11 +117,11 @@ export default function AppSidebar({
                       to={`/tag/${tag.id}`}
                       onClick={() => isMobile && onMobileClose?.()}
                       className={cn(
-                        'flex items-center gap-2.5 py-1.5 px-2 text-sm transition-colors rounded-md',
-                        active ? 'text-white font-medium bg-white/10' : 'text-white/50 hover:text-white/80 hover:bg-white/5',
+                        'flex items-center gap-2.5 py-1.5 px-2 text-sm transition-all duration-150 rounded-lg',
+                        active ? 'text-white font-medium bg-white/10' : 'text-white/45 hover:text-white/75 hover:bg-white/[0.06]',
                       )}
                     >
-                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: tag.color }} />
+                      <span className="w-2 h-2 rounded-full shrink-0 ring-1 ring-white/10" style={{ backgroundColor: tag.color }} />
                       <span className="truncate">{tag.name}</span>
                     </Link>
                   );
@@ -129,7 +129,7 @@ export default function AppSidebar({
                 {(!tags || tags.length === 0) && (
                   <button
                     onClick={() => setTagManagerOpen(true)}
-                    className="text-xs text-white/30 hover:text-white/50 transition-colors py-1"
+                    className="text-xs text-white/25 hover:text-white/45 transition-colors duration-150 py-1"
                   >
                     Create your first tag
                   </button>
@@ -139,15 +139,15 @@ export default function AppSidebar({
           )}
         </nav>
 
-        <div className="px-2 py-2 space-y-0.5 border-t" style={{ borderColor: 'hsl(var(--sidebar-border))' }}>
+        <div className="px-2 py-2.5 space-y-0.5 border-t" style={{ borderColor: 'hsl(var(--sidebar-border))' }}>
           <Link
             to="/settings"
             onClick={() => isMobile && onMobileClose?.()}
             className={cn(
-              'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
+              'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-150',
               location.pathname === '/settings'
                 ? 'bg-white/10 text-white font-medium'
-                : 'text-white/60 hover:text-white hover:bg-white/5',
+                : 'text-white/55 hover:text-white/90 hover:bg-white/[0.06]',
               collapsed && 'justify-center px-0',
             )}
           >
@@ -160,10 +160,10 @@ export default function AppSidebar({
               to="/admin"
               onClick={() => isMobile && onMobileClose?.()}
               className={cn(
-                'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
+                'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-150',
                 location.pathname === '/admin'
                   ? 'bg-white/10 text-white font-medium'
-                  : 'text-white/60 hover:text-white hover:bg-white/5',
+                  : 'text-white/55 hover:text-white/90 hover:bg-white/[0.06]',
                 collapsed && 'justify-center px-0',
               )}
             >
