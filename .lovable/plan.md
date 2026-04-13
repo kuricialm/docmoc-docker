@@ -1,45 +1,67 @@
 
-Root cause is very likely not the URL builder itself, but the modal flow still allowing an empty/invalid value to reach the clipboard path. I found three weak points in the current implementation:
+Goal: make authentication work in Lovable preview without breaking your Docker/NAS deployment, so admin actions, uploads, and user creation all work in both places.
 
-1. `DocumentViewer` stores `shareUrl` in local state, but it also resets that state from `doc` whenever the polled documents query refreshes. Since documents refetch every second, the modal can get briefly re-synced from stale `doc.share_token` data and overwrite the valid URL you just generated.
-2. The modal only shows/copies `shareUrl`, so if that state is nulled or stale for even one render, the copy action can run against the wrong source.
-3. The clipboard helper should be hardened so it never attempts to copy undefined/blank text and gives a stricter failure signal.
+What’s actually happening
+- The backend is returning a successful login response, so the UI thinks you’re logged in.
+- But subsequent protected requests return `401 Not authenticated`, which is why:
+  - Admin page shows no users
+  - Create user fails
+  - Uploads fail
+- The strongest root cause is the session cookie not being persisted/sent correctly in Lovable’s embedded preview context. Your current cookie is set as `SameSite: 'lax'`, which commonly breaks inside iframe-style preview environments even though it can still work fine on a normal Docker deployment.
 
-Plan
+Why this is safe to fix
+- This is a session-cookie handling issue, not a database, uploads, or infrastructure issue.
+- I do not need to change your storage, schema, API shape, or Docker architecture.
+- The fix should be limited to server-side cookie policy plus a small frontend auth verification improvement.
 
-1. Make the modal use a single reliable source of truth for the link
-- In `DocumentViewer.tsx`, compute the current share URL from:
-  - the last successful generated token/URL kept locally, or
-  - the latest `doc.share_token` from props
-- Do not blindly overwrite a valid locally generated share URL with `null` during polling refreshes.
+Implementation plan
 
-2. Harden the generate-link flow
-- In the share mutation `onSuccess`, persist the returned token/url immediately.
-- Copy that exact generated URL before closing the share dialog.
-- If the API returns no token while sharing is enabled, show an explicit error toast instead of silently proceeding.
+1. Make session cookies preview-compatible and proxy-safe in `server.cjs`
+- Add a small cookie helper that detects secure/HTTPS contexts safely.
+- Set session cookies like:
+  - `httpOnly: true`
+  - `path: '/'`
+  - `secure: true` when request is effectively HTTPS
+  - `sameSite: 'none'` for secure preview contexts
+  - fallback to `sameSite: 'lax'` for plain local HTTP dev
+- Keep the existing 30-day `remember me` behavior.
 
-3. Fix the modal copy button permanently
-- Make `handleCopyLink` resolve the URL at click time from the safest available source, not just raw state.
-- Trim/validate the final string before copying.
-- Keep the button visible only when a valid URL exists.
+2. Make proxy / NAS deployment safe
+- Add proxy-aware handling (`trust proxy` + forwarded protocol detection) so cookies behave correctly behind Docker/NAS reverse proxies too.
+- Reuse the same cookie helper for:
+  - login
+  - logout
+  - password-change forced logout
+- This keeps behavior consistent across Lovable preview and your own hosted server.
 
-4. Strengthen the clipboard helper
-- Update `src/lib/share.ts` so `copyTextToClipboard` rejects empty strings.
-- Keep Clipboard API first, but make the fallback stricter and more deterministic.
-- This helps prevent “success but blank clipboard” behavior.
+3. Prevent false “logged in” state on the frontend
+- After sign-in, verify the session with `/auth/me` before treating the user as fully authenticated.
+- If cookie persistence fails, clear local auth state and show a clear error instead of letting the UI enter a broken half-logged-in state.
 
-5. Preserve your datetime UX
-- Keep `openShareSettings()` defaulting to the user’s current local datetime every time the modal opens for editing, as requested.
-
-6. Validate after implementation
-- Generate a share link from the document modal and confirm it auto-copies the real URL
-- Close/reopen the modal and confirm “Copy link” still copies the same URL
-- Open from “Shared by Me”, use the modal copy button, and confirm no blank clipboard result
-- Re-test the page-level “Copy Link” button to ensure no regression
+4. Re-test admin and uploads after the auth fix
+- Confirm admin page loads users
+- Confirm create-user works
+- Confirm uploads work
+- Confirm refresh keeps you logged in when expected
+- Confirm password change still clears the session
+- Confirm “remember me” still persists for 30 days
 
 Files to update
-- `src/components/DocumentViewer.tsx`
-- `src/lib/share.ts`
+- `server.cjs` — main cookie/session fix
+- `src/contexts/AuthContext.tsx` — safer auth state confirmation after login
+- Possibly `src/lib/api.ts` — only if a tiny auth verification helper is cleaner there
 
-Technical note
-The strongest fix is to stop relying on a fragile `shareUrl` state that gets reset during query polling, and instead derive the link from a stable token/url source plus stricter clipboard validation.
+Validation I will do after implementation
+- Log in as admin in Lovable preview
+- Refresh the page and confirm session persists
+- Open `/admin` and confirm users load
+- Create a user successfully
+- Upload a file successfully
+- Test login with and without “Remember me”
+- Change password in Settings and confirm session is cleared
+- Sanity-check that Docker/NAS flow remains unchanged
+
+Expected outcome
+- Lovable preview becomes fully testable like a real environment
+- Docker/NAS deployment keeps working
+- No backend migration or infrastructure rewrite needed
