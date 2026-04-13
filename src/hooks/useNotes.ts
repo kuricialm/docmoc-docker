@@ -23,7 +23,11 @@ export function useNoteMutations() {
       if (!user) throw new Error('Not authenticated');
       await api.upsertNote(documentId, user.id, content);
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['document-note'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['document-note'] });
+      qc.invalidateQueries({ queryKey: ['documents'] });
+      qc.invalidateQueries({ queryKey: ['document-history'] });
+    },
   });
 
   return { upsertNote };

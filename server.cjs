@@ -56,6 +56,16 @@ db.exec(`
     content TEXT, created_at TEXT, updated_at TEXT,
     FOREIGN KEY(document_id) REFERENCES documents(id) ON DELETE CASCADE
   );
+  CREATE TABLE IF NOT EXISTS document_history (
+    id TEXT PRIMARY KEY,
+    document_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    action TEXT NOT NULL,
+    details TEXT,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(document_id) REFERENCES documents(id) ON DELETE CASCADE,
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
   CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);
 `);
 
@@ -152,6 +162,11 @@ function extFromMime(mime) {
   if (map[mime]) return map[mime];
   const parts = (mime || '').split('/');
   return parts[1] || 'bin';
+}
+
+function logDocumentEvent(documentId, userId, action, details = null) {
+  db.prepare('INSERT INTO document_history (id, document_id, user_id, action, details, created_at) VALUES (?,?,?,?,?,?)')
+    .run(uid(), documentId, userId, action, details ? JSON.stringify(details) : null, now());
 }
 
 // ── Trash cleanup ──
@@ -513,14 +528,17 @@ app.post('/api/documents/upload', auth, upload.single('file'), (req, res) => {
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
     .run(doc.id, doc.user_id, doc.name, doc.file_type, doc.file_size, doc.storage_path,
       doc.starred, doc.trashed, doc.trashed_at, doc.shared, doc.share_token, doc.created_at, doc.updated_at);
+  logDocumentEvent(doc.id, req.user.id, 'uploaded', { name: doc.name });
 
   res.json({ ...doc, name: normalizeUploadedFilename(doc.name), starred: false, trashed: false, shared: false, tags: [], tag_ids: [] });
 });
 
 app.patch('/api/documents/:id/rename', auth, (req, res) => {
   const { name } = req.body;
+  const existing = db.prepare('SELECT name FROM documents WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
   db.prepare('UPDATE documents SET name = ?, updated_at = ? WHERE id = ? AND user_id = ?')
     .run(name, now(), req.params.id, req.user.id);
+  if (existing) logDocumentEvent(req.params.id, req.user.id, 'renamed', { from: existing.name, to: name });
   res.json({ ok: true });
 });
 
@@ -528,18 +546,21 @@ app.patch('/api/documents/:id/star', auth, (req, res) => {
   const { starred } = req.body;
   db.prepare('UPDATE documents SET starred = ?, updated_at = ? WHERE id = ? AND user_id = ?')
     .run(starred ? 1 : 0, now(), req.params.id, req.user.id);
+  logDocumentEvent(req.params.id, req.user.id, starred ? 'starred' : 'unstarred');
   res.json({ ok: true });
 });
 
 app.patch('/api/documents/:id/trash', auth, (req, res) => {
   db.prepare('UPDATE documents SET trashed = 1, trashed_at = ?, updated_at = ? WHERE id = ? AND user_id = ?')
     .run(now(), now(), req.params.id, req.user.id);
+  logDocumentEvent(req.params.id, req.user.id, 'deleted');
   res.json({ ok: true });
 });
 
 app.patch('/api/documents/:id/restore', auth, (req, res) => {
   db.prepare('UPDATE documents SET trashed = 0, trashed_at = NULL, updated_at = ? WHERE id = ? AND user_id = ?')
     .run(now(), req.params.id, req.user.id);
+  logDocumentEvent(req.params.id, req.user.id, 'restored');
   res.json({ ok: true });
 });
 
@@ -560,6 +581,7 @@ app.patch('/api/documents/:id/share', auth, (req, res) => {
   if (!shared) {
     db.prepare('UPDATE documents SET shared = 0, share_token = NULL, share_expires_at = NULL, share_password_hash = NULL, updated_at = ? WHERE id = ? AND user_id = ?')
       .run(now(), req.params.id, req.user.id);
+    logDocumentEvent(req.params.id, req.user.id, 'share_disabled');
     return res.json({ ok: true, share_token: null });
   }
 
@@ -584,6 +606,10 @@ app.patch('/api/documents/:id/share', auth, (req, res) => {
   const shareToken = existing.share_token || uid();
   db.prepare('UPDATE documents SET shared = 1, share_token = ?, share_expires_at = ?, share_password_hash = ?, updated_at = ? WHERE id = ? AND user_id = ?')
     .run(shareToken, shareExpiresAt, sharePasswordHash, now(), req.params.id, req.user.id);
+  logDocumentEvent(req.params.id, req.user.id, existing.share_token ? 'share_updated' : 'share_enabled', {
+    hasPassword: !!sharePasswordHash,
+    expiresAt: shareExpiresAt,
+  });
   res.json({ ok: true, share_token: shareToken });
 });
 
@@ -637,12 +663,20 @@ app.post('/api/documents/:docId/tags/:tagId', auth, (req, res) => {
     db.prepare('INSERT OR IGNORE INTO document_tags (document_id, tag_id) VALUES (?,?)')
       .run(req.params.docId, req.params.tagId);
   } catch (_) {}
+  db.prepare('UPDATE documents SET updated_at = ? WHERE id = ? AND user_id = ?')
+    .run(now(), req.params.docId, req.user.id);
+  const tag = db.prepare('SELECT name FROM tags WHERE id = ? AND user_id = ?').get(req.params.tagId, req.user.id);
+  logDocumentEvent(req.params.docId, req.user.id, 'tag_added', { tagName: tag?.name || req.params.tagId });
   res.json({ ok: true });
 });
 
 app.delete('/api/documents/:docId/tags/:tagId', auth, (req, res) => {
+  const tag = db.prepare('SELECT name FROM tags WHERE id = ? AND user_id = ?').get(req.params.tagId, req.user.id);
   db.prepare('DELETE FROM document_tags WHERE document_id = ? AND tag_id = ?')
     .run(req.params.docId, req.params.tagId);
+  db.prepare('UPDATE documents SET updated_at = ? WHERE id = ? AND user_id = ?')
+    .run(now(), req.params.docId, req.user.id);
+  logDocumentEvent(req.params.docId, req.user.id, 'tag_removed', { tagName: tag?.name || req.params.tagId });
   res.json({ ok: true });
 });
 
@@ -664,7 +698,27 @@ app.put('/api/documents/:id/note', auth, (req, res) => {
     db.prepare('INSERT INTO notes (id, document_id, user_id, content, created_at, updated_at) VALUES (?,?,?,?,?,?)')
       .run(uid(), req.params.id, req.user.id, content, now(), now());
   }
+  db.prepare('UPDATE documents SET updated_at = ? WHERE id = ? AND user_id = ?')
+    .run(now(), req.params.id, req.user.id);
+  logDocumentEvent(req.params.id, req.user.id, existing ? 'note_updated' : 'note_added');
   res.json({ ok: true });
+});
+
+app.get('/api/documents/:id/history', auth, (req, res) => {
+  const owned = db.prepare('SELECT id FROM documents WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+  if (!owned) return res.status(404).json({ error: 'Not found' });
+  const rows = db.prepare(`
+    SELECT h.id, h.document_id, h.user_id, h.action, h.details, h.created_at, u.full_name, u.email
+    FROM document_history h
+    LEFT JOIN users u ON u.id = h.user_id
+    WHERE h.document_id = ?
+    ORDER BY h.created_at DESC
+  `).all(req.params.id);
+  res.json(rows.map((r) => ({
+    ...r,
+    details: r.details ? JSON.parse(r.details) : null,
+    actor_name: r.full_name || r.email || 'Unknown user',
+  })));
 });
 
 // ── Shared (no auth) ──

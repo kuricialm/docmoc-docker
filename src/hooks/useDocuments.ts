@@ -23,6 +23,19 @@ export type Document = {
   tags?: { id: string; name: string; color: string }[];
 };
 
+export function useDocumentHistory(documentId?: string) {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ['document-history', user?.id, documentId],
+    queryFn: async () => {
+      if (!user || !documentId) return [];
+      return api.getDocumentHistory(documentId);
+    },
+    enabled: !!user && !!documentId,
+    refetchInterval: 1000,
+  });
+}
+
 export function useDocuments(filter?: {
   trashed?: boolean;
   starred?: boolean;
@@ -48,7 +61,10 @@ export function useDocuments(filter?: {
 export function useDocumentMutations() {
   const { user } = useAuth();
   const qc = useQueryClient();
-  const invalidate = () => qc.invalidateQueries({ queryKey: ['documents'] });
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['documents'] });
+    qc.invalidateQueries({ queryKey: ['document-history'] });
+  };
 
   const uploadDocument = useMutation({
     mutationFn: async (file: File) => {
