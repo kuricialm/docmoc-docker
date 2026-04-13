@@ -6,6 +6,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import FileTypeIcon from './FileTypeIcon';
+import DocumentThumbnail from './DocumentThumbnail';
+import { useLocalSettings } from '@/hooks/useLocalSettings';
 
 type Props = {
   document: Document;
@@ -16,6 +18,7 @@ type Props = {
 export default function DocumentCard({ document: doc, onView, onRename }: Props) {
   const { toggleStar, trashDocument, toggleShare, downloadDocument } = useDocumentMutations();
   const typeInfo = getFileTypeInfo(doc.file_type);
+  const { settings } = useLocalSettings();
 
   return (
     <div
@@ -23,7 +26,7 @@ export default function DocumentCard({ document: doc, onView, onRename }: Props)
       onClick={() => onView(doc)}
     >
       <div className="h-36 sm:h-40 bg-muted/60 flex items-center justify-center relative">
-        <FileTypeIcon fileType={doc.file_type} size="lg" />
+        <DocumentThumbnail docId={doc.id} fileType={doc.file_type} enabled={settings.thumbnailPreviews} />
         <button
           onClick={(e) => { e.stopPropagation(); toggleStar.mutate({ id: doc.id, starred: !doc.starred }); }}
           className={cn(
