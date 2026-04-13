@@ -9,6 +9,8 @@ import DocumentViewer from '@/components/DocumentViewer';
 import RenameDialog from '@/components/RenameDialog';
 import DocumentBrowseToolbar from '@/components/DocumentBrowseToolbar';
 import { FileText } from 'lucide-react';
+import { toast } from 'sonner';
+import { ACCEPTED_UPLOAD_ATTR, isAcceptedUploadFile } from '@/lib/fileTypes';
 
 type Props = {
   viewMode: 'grid' | 'list';
@@ -23,6 +25,8 @@ export default function AllDocuments({ viewMode, search }: Props) {
   const { uploadDocument } = useDocumentMutations();
   const [viewDocId, setViewDocId] = useState<string | null>(null);
   const [renameDoc, setRenameDoc] = useState<Document | null>(null);
+  const [isDraggingFiles, setIsDraggingFiles] = useState(false);
+  const dragDepthRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const {
@@ -49,13 +53,90 @@ export default function AllDocuments({ viewMode, search }: Props) {
   const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
-    Array.from(files).forEach((f) => uploadDocument.mutate(f));
+    const acceptedFiles = Array.from(files).filter((file) => isAcceptedUploadFile(file));
+    const rejectedCount = files.length - acceptedFiles.length;
+
+    acceptedFiles.forEach((file) => uploadDocument.mutate(file));
+    if (rejectedCount > 0) {
+      toast.error(`${rejectedCount} file${rejectedCount > 1 ? 's were' : ' was'} skipped (unsupported format).`);
+    }
+
     e.target.value = '';
   }, [uploadDocument]);
 
+  const resetDragState = useCallback(() => {
+    dragDepthRef.current = 0;
+    setIsDraggingFiles(false);
+  }, []);
+
+  const hasFileDrag = useCallback((event: React.DragEvent<HTMLElement>) => {
+    return Array.from(event.dataTransfer.types).includes('Files');
+  }, []);
+
+  const handleDragEnter = useCallback((event: React.DragEvent<HTMLElement>) => {
+    if (!hasFileDrag(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    dragDepthRef.current += 1;
+    setIsDraggingFiles(true);
+  }, [hasFileDrag]);
+
+  const handleDragOver = useCallback((event: React.DragEvent<HTMLElement>) => {
+    if (!hasFileDrag(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = 'copy';
+  }, [hasFileDrag]);
+
+  const handleDragLeave = useCallback((event: React.DragEvent<HTMLElement>) => {
+    if (!hasFileDrag(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    dragDepthRef.current -= 1;
+    if (dragDepthRef.current <= 0) {
+      resetDragState();
+    }
+  }, [hasFileDrag, resetDragState]);
+
+  const handleDrop = useCallback((event: React.DragEvent<HTMLElement>) => {
+    if (!hasFileDrag(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    resetDragState();
+
+    const files = Array.from(event.dataTransfer.files);
+    if (!files.length) return;
+
+    const acceptedFiles = files.filter((file) => isAcceptedUploadFile(file));
+    const rejectedCount = files.length - acceptedFiles.length;
+    acceptedFiles.forEach((file) => uploadDocument.mutate(file));
+
+    if (rejectedCount > 0) {
+      toast.error(`${rejectedCount} file${rejectedCount > 1 ? 's were' : ' was'} skipped (unsupported format).`);
+    }
+  }, [hasFileDrag, resetDragState, uploadDocument]);
+
   return (
-    <div className="space-y-6 animate-page-in">
-      <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileChange} id="file-upload" />
+    <div
+      className={`relative space-y-6 animate-page-in transition-colors duration-200 ${
+        isDraggingFiles ? 'rounded-xl bg-primary/5 ring-2 ring-primary/30 ring-offset-2 ring-offset-background' : ''
+      }`}
+      onDragEnter={handleDragEnter}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      <input ref={fileInputRef} type="file" accept={ACCEPTED_UPLOAD_ATTR} multiple className="hidden" onChange={handleFileChange} id="file-upload" />
+
+      {isDraggingFiles && (
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-xl border-2 border-dashed border-primary/50 bg-background/65 backdrop-blur-[1px]">
+          <div className="rounded-lg bg-background/95 px-4 py-3 shadow-sm border border-primary/30">
+            <p className="text-sm font-medium text-foreground">Drop files to upload</p>
+            <p className="text-xs text-muted-foreground mt-1">Supported: PDF, TXT, CSV, DOCX, XLSX, PPTX, images, ZIP</p>
+          </div>
+        </div>
+      )}
+
       <DashboardStats documents={[...allDocs, ...trashedDocs]} />
 
       <DocumentBrowseToolbar

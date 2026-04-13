@@ -11,6 +11,53 @@ export const FILE_TYPE_CONFIG: Record<string, { label: string; color: string; bg
   'image/svg+xml': { label: 'SVG', color: 'hsl(271, 91%, 55%)', bgColor: 'hsl(271, 91%, 95%)' },
 };
 
+export const ACCEPTED_UPLOAD_MIME_TYPES = [
+  'application/pdf',
+  'text/plain',
+  'text/csv',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'image/png',
+  'image/jpeg',
+  'image/jpg',
+  'image/gif',
+  'image/webp',
+  'image/svg+xml',
+  'application/zip',
+] as const;
+
+export const ACCEPTED_UPLOAD_EXTENSIONS = [
+  '.pdf',
+  '.txt',
+  '.csv',
+  '.docx',
+  '.xlsx',
+  '.pptx',
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.gif',
+  '.webp',
+  '.svg',
+  '.zip',
+] as const;
+
+export const ACCEPTED_UPLOAD_ATTR = [
+  ...ACCEPTED_UPLOAD_MIME_TYPES,
+  ...ACCEPTED_UPLOAD_EXTENSIONS,
+].join(',');
+
+export function isAcceptedUploadFile(file: Pick<File, 'name' | 'type'>): boolean {
+  const fileType = (file.type || '').toLowerCase();
+  if (ACCEPTED_UPLOAD_MIME_TYPES.includes(fileType as (typeof ACCEPTED_UPLOAD_MIME_TYPES)[number])) return true;
+
+  const dotIndex = file.name.lastIndexOf('.');
+  if (dotIndex < 0) return false;
+  const ext = file.name.slice(dotIndex).toLowerCase();
+  return ACCEPTED_UPLOAD_EXTENSIONS.includes(ext as (typeof ACCEPTED_UPLOAD_EXTENSIONS)[number]);
+}
+
 export function getFileTypeInfo(mimeType: string) {
   return FILE_TYPE_CONFIG[mimeType] || { label: mimeType.split('/').pop()?.toUpperCase() || 'FILE', color: 'hsl(215, 16%, 47%)', bgColor: 'hsl(215, 20%, 95%)' };
 }

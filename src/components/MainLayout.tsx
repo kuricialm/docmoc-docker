@@ -12,6 +12,7 @@ import SettingsPage from '@/pages/Settings';
 import AdminPage from '@/pages/Admin';
 import { useDocumentMutations } from '@/hooks/useDocuments';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { ACCEPTED_UPLOAD_ATTR } from '@/lib/fileTypes';
 
 export default function MainLayout() {
   const isMobile = useIsMobile();
@@ -42,7 +43,7 @@ export default function MainLayout() {
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-background">
-      <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileChange} />
+      <input ref={fileInputRef} type="file" accept={ACCEPTED_UPLOAD_ATTR} multiple className="hidden" onChange={handleFileChange} />
       <AppSidebar
         collapsed={isMobile ? false : sidebarCollapsed}
         onToggle={() => (isMobile ? setMobileSidebarOpen(false) : setSidebarCollapsed(!sidebarCollapsed))}
