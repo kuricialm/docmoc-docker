@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Document } from '@/hooks/useDocuments';
 import { useDocumentNote, useNoteMutations } from '@/hooks/useNotes';
 import { useTags, useTagMutations } from '@/hooks/useTags';
@@ -29,7 +29,8 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
   const [optimisticStarred, setOptimisticStarred] = useState(false);
   const [optimisticTags, setOptimisticTags] = useState<Document['tags']>([]);
   const [optimisticShared, setOptimisticShared] = useState(false);
-  const [optimisticShareToken, setOptimisticShareToken] = useState<string | null>(null);
+  // Persisted share URL — set once from doc or after generate, never goes blank
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [expiresAt, setExpiresAt] = useState('');
   const [sharePassword, setSharePassword] = useState('');
@@ -38,6 +39,7 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
   const { downloadDocument, toggleShare, toggleStar } = useDocumentMutations();
   const { data: allTags } = useTags();
   const { addTagToDocument, removeTagFromDocument } = useTagMutations();
+
   const getLocalDateTime = () => {
     const local = new Date(Date.now() - new Date().getTimezoneOffset() * 60000);
     return local.toISOString().slice(0, 16);
@@ -76,15 +78,18 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
     setOptimisticStarred(doc.starred);
     setOptimisticTags(doc.tags || []);
     setOptimisticShared(doc.shared);
-    setOptimisticShareToken(doc.share_token ?? null);
+    // Initialize shareUrl from the document's existing token
+    if (doc.share_token) {
+      setShareUrl(getSharedDocumentUrl(doc.share_token));
+    } else {
+      setShareUrl(null);
+    }
     setExpiresAt(doc.share_expires_at ? doc.share_expires_at.slice(0, 16) : '');
     setSharePassword('');
   }, [doc]);
 
   if (!doc) return null;
   const typeInfo = getFileTypeInfo(doc.file_type);
-  const activeShareToken = optimisticShareToken ?? doc.share_token ?? null;
-  const shareUrl = activeShareToken ? getSharedDocumentUrl(activeShareToken) : null;
   const docTagIds = optimisticTags?.map((t) => t.id) || [];
   const availableTags = allTags?.filter((t) => !docTagIds.includes(t.id)) || [];
 
@@ -94,9 +99,12 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
   };
 
   const handleCopyLink = async () => {
-    if (!activeShareToken) return;
+    if (!shareUrl) {
+      toast.error('No share link available');
+      return;
+    }
     try {
-      await copyTextToClipboard(getSharedDocumentUrl(activeShareToken));
+      await copyTextToClipboard(shareUrl);
       toast.success('Link copied');
     } catch {
       toast.error('Failed to copy link');
@@ -131,19 +139,19 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
 
   const handleDisableSharing = () => {
     setOptimisticShared(false);
-    setOptimisticShareToken(null);
+    setShareUrl(null);
     toggleShare.mutate(
       { id: doc.id, shared: false },
       {
         onError: () => {
           setOptimisticShared(doc.shared);
-          setOptimisticShareToken(doc.share_token ?? null);
+          if (doc.share_token) setShareUrl(getSharedDocumentUrl(doc.share_token));
         },
       },
     );
   };
 
-  const handleGenerateShareLink = () => {
+  const handleGenerateShareLink = async () => {
     if (sharePassword && sharePassword.length < 4) {
       toast.error('Password must be at least 4 characters');
       return;
@@ -161,13 +169,15 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
         onSuccess: async (data: { share_token: string | null } | undefined) => {
           const token = data?.share_token ?? null;
           setOptimisticShared(true);
-          setOptimisticShareToken(token);
           setShareDialogOpen(false);
+
           if (token) {
             const url = getSharedDocumentUrl(token);
+            // Persist the URL so copy button always works
+            setShareUrl(url);
             try {
               await copyTextToClipboard(url);
-              toast.success('Share link generated and copied');
+              toast.success('Share link generated & copied');
             } catch {
               toast.success('Share link generated');
             }
@@ -175,14 +185,19 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
         },
         onError: () => {
           setOptimisticShared(doc.shared);
-          setOptimisticShareToken(doc.share_token ?? null);
+          if (doc.share_token) {
+            setShareUrl(getSharedDocumentUrl(doc.share_token));
+          } else {
+            setShareUrl(null);
+          }
         },
       },
     );
   };
 
   const openShareSettings = () => {
-    setExpiresAt(doc.share_expires_at ? doc.share_expires_at.slice(0, 16) : getLocalDateTime());
+    // Always default to the user's current local datetime
+    setExpiresAt(getLocalDateTime());
     setSharePassword('');
     setShareDialogOpen(true);
   };
