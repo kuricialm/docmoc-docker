@@ -421,6 +421,7 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
                   <div className="space-y-3 text-sm">
                     <div className="flex justify-between gap-2"><span className="text-muted-foreground">Type</span><span className="font-medium px-1.5 py-0.5 rounded-md text-xs" style={{ color: typeInfo.color, backgroundColor: typeInfo.bgColor }}>{typeInfo.label}</span></div>
                     <div className="flex justify-between gap-2"><span className="text-muted-foreground">Size</span><span>{formatFileSize(doc.file_size)}</span></div>
+                    <div className="flex justify-between gap-2"><span className="text-muted-foreground">Uploaded by</span><span className="text-right">{doc.uploaded_by_name || 'Unknown user'}</span></div>
                     <div className="flex justify-between gap-2"><span className="text-muted-foreground">Uploaded at</span><span className="text-right">{formatDateTime(doc.created_at)}</span></div>
                     <div className="flex justify-between gap-2"><span className="text-muted-foreground">Modified at</span><span className="text-right">{formatDateTime(doc.updated_at)}</span></div>
                   </div>

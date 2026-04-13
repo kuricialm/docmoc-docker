@@ -22,8 +22,10 @@ export default function SettingsPage() {
 
   const [newPassword, setNewPassword] = useState('');
   const [newEmail, setNewEmail] = useState(user?.email ?? '');
+  const [displayName, setDisplayName] = useState(profile?.full_name ?? '');
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [emailLoading, setEmailLoading] = useState(false);
+  const [displayNameLoading, setDisplayNameLoading] = useState(false);
   const [logoUploading, setLogoUploading] = useState(false);
   const [logoRemoving, setLogoRemoving] = useState(false);
   const [faviconUploading, setFaviconUploading] = useState(false);
@@ -31,6 +33,7 @@ export default function SettingsPage() {
   const [registrationEnabled, setRegistrationEnabled] = useState(true);
 
   useEffect(() => { setNewEmail(user?.email ?? ''); }, [user?.email]);
+  useEffect(() => { setDisplayName(profile?.full_name ?? ''); }, [profile?.full_name]);
 
   useEffect(() => {
     if (isAdmin) {
@@ -65,6 +68,29 @@ export default function SettingsPage() {
       toast.success('Email updated');
     } catch (err: any) { toast.error(err.message); }
     setEmailLoading(false);
+  };
+
+  const handleDisplayNameChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+    const trimmed = displayName.trim();
+    if (!trimmed) {
+      toast.error('Display name is required');
+      return;
+    }
+    if (trimmed === (profile?.full_name || '').trim()) {
+      toast.message('Display name is already up to date');
+      return;
+    }
+    setDisplayNameLoading(true);
+    try {
+      await api.updateProfile(user.id, { fullName: trimmed });
+      await refreshProfile();
+      toast.success('Display name updated');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update display name');
+    }
+    setDisplayNameLoading(false);
   };
 
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -152,6 +178,19 @@ export default function SettingsPage() {
           </div>
         </Section>
       )}
+
+      <Section>
+        <h3 className="text-sm font-semibold">Display Name</h3>
+        <form onSubmit={handleDisplayNameChange} className="space-y-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Full Name</Label>
+            <Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Enter your display name" required className="h-10 rounded-lg" />
+          </div>
+          <Button type="submit" size="sm" className="rounded-lg" disabled={displayNameLoading}>
+            {displayNameLoading ? 'Updating...' : 'Update Name'}
+          </Button>
+        </form>
+      </Section>
 
       <Section>
         <h3 className="text-sm font-semibold">Change Email</h3>

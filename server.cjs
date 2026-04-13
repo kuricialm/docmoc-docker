@@ -82,6 +82,7 @@ function ensureDocumentColumn(columnName, sqlDefinition) {
 
 ensureDocumentColumn('share_expires_at', 'share_expires_at TEXT');
 ensureDocumentColumn('share_password_hash', 'share_password_hash TEXT');
+ensureDocumentColumn('shared_by_user_id', 'shared_by_user_id TEXT');
 
 // Seed admin
 const userCount = db.prepare('SELECT COUNT(*) as c FROM users').get().c;
@@ -492,20 +493,28 @@ app.post('/api/auth/register', (req, res) => {
 app.get('/api/documents', auth, (req, res) => {
   cleanupExpiredShares(req.user.id);
   const { trashed, starred, shared, tagId, recent, recentLimit, sortBy } = req.query;
-  let sql = 'SELECT * FROM documents WHERE user_id = ?';
+  let sql = `
+    SELECT d.*,
+           COALESCE(u.full_name, u.email, 'Unknown user') AS uploaded_by_name,
+           COALESCE(s.full_name, s.email, u.full_name, u.email, 'Unknown user') AS shared_by_name
+    FROM documents d
+    LEFT JOIN users u ON u.id = d.user_id
+    LEFT JOIN users s ON s.id = COALESCE(d.shared_by_user_id, d.user_id)
+    WHERE d.user_id = ?
+  `;
   const params = [req.user.id];
 
   if (trashed !== undefined) {
-    sql += ' AND trashed = ?';
+    sql += ' AND d.trashed = ?';
     params.push(trashed === 'true' ? 1 : 0);
   } else {
-    sql += ' AND trashed = 0';
+    sql += ' AND d.trashed = 0';
   }
-  if (starred === 'true') { sql += ' AND starred = 1'; }
-  if (shared === 'true') { sql += ' AND shared = 1'; }
+  if (starred === 'true') { sql += ' AND d.starred = 1'; }
+  if (shared === 'true') { sql += ' AND d.shared = 1'; }
 
   const orderBy = sortBy === 'updated' ? 'updated_at' : 'created_at';
-  sql += ` ORDER BY ${orderBy} DESC`;
+  sql += ` ORDER BY d.${orderBy} DESC`;
   if (recent === 'true') {
     if (recentLimit !== undefined) {
       const parsedLimit = Number.parseInt(String(recentLimit), 10);
@@ -570,7 +579,17 @@ app.post('/api/documents/upload', auth, upload.single('file'), (req, res) => {
       doc.starred, doc.trashed, doc.trashed_at, doc.shared, doc.share_token, doc.created_at, doc.updated_at);
   logDocumentEvent(doc.id, req.user.id, 'uploaded', { name: doc.name });
 
-  res.json({ ...doc, name: normalizeUploadedFilename(doc.name), starred: false, trashed: false, shared: false, tags: [], tag_ids: [] });
+  res.json({
+    ...doc,
+    name: normalizeUploadedFilename(doc.name),
+    uploaded_by_name: req.user.full_name || req.user.email || 'Unknown user',
+    shared_by_name: req.user.full_name || req.user.email || 'Unknown user',
+    starred: false,
+    trashed: false,
+    shared: false,
+    tags: [],
+    tag_ids: [],
+  });
 });
 
 app.patch('/api/documents/:id/rename', auth, (req, res) => {
@@ -633,7 +652,7 @@ app.patch('/api/documents/:id/share', auth, (req, res) => {
   if (!existing) return res.status(404).json({ error: 'Not found' });
   if (!shared) {
     if (!existing.shared) return res.json({ ok: true, share_token: null });
-    db.prepare('UPDATE documents SET shared = 0, share_token = NULL, share_expires_at = NULL, share_password_hash = NULL, updated_at = ? WHERE id = ? AND user_id = ?')
+    db.prepare('UPDATE documents SET shared = 0, share_token = NULL, share_expires_at = NULL, share_password_hash = NULL, shared_by_user_id = NULL, updated_at = ? WHERE id = ? AND user_id = ?')
       .run(now(), req.params.id, req.user.id);
     logDocumentEvent(req.params.id, req.user.id, 'share_disabled');
     return res.json({ ok: true, share_token: null });
@@ -671,8 +690,8 @@ app.patch('/api/documents/:id/share', auth, (req, res) => {
   }
 
   const shareToken = existing.share_token || uid();
-  db.prepare('UPDATE documents SET shared = 1, share_token = ?, share_expires_at = ?, share_password_hash = ?, updated_at = ? WHERE id = ? AND user_id = ?')
-    .run(shareToken, shareExpiresAt, sharePasswordHash, now(), req.params.id, req.user.id);
+  db.prepare('UPDATE documents SET shared = 1, share_token = ?, share_expires_at = ?, share_password_hash = ?, shared_by_user_id = ?, updated_at = ? WHERE id = ? AND user_id = ?')
+    .run(shareToken, shareExpiresAt, sharePasswordHash, req.user.id, now(), req.params.id, req.user.id);
   logDocumentEvent(req.params.id, req.user.id, existing.share_token ? 'share_updated' : 'share_enabled', { expiresAt: shareExpiresAt });
   if (expiryChanged) {
     logDocumentEvent(req.params.id, req.user.id, 'share_expiry_changed', {
@@ -852,7 +871,15 @@ app.get('/api/documents/:id/history', auth, (req, res) => {
 
 // ── Shared (no auth) ──
 app.get('/api/shared/:token', (req, res) => {
-  const doc = db.prepare('SELECT * FROM documents WHERE share_token = ? AND shared = 1 AND trashed = 0')
+  const doc = db.prepare(`
+    SELECT d.*,
+           COALESCE(u.full_name, u.email, 'Unknown user') AS uploaded_by_name,
+           COALESCE(s.full_name, s.email, u.full_name, u.email, 'Unknown user') AS shared_by_name
+    FROM documents d
+    LEFT JOIN users u ON u.id = d.user_id
+    LEFT JOIN users s ON s.id = COALESCE(d.shared_by_user_id, d.user_id)
+    WHERE d.share_token = ? AND d.shared = 1 AND d.trashed = 0
+  `)
     .get(req.params.token);
   if (!doc) return res.status(404).json({ error: 'Not found' });
   if (doc.share_expires_at && new Date(doc.share_expires_at).getTime() <= Date.now()) {

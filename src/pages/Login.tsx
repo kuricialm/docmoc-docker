@@ -63,13 +63,13 @@ export default function Login() {
         <div className="bg-background border border-border rounded-2xl shadow-sm p-7 sm:p-8">
           <div className="text-center mb-8">
             <div className="inline-flex items-center gap-2.5 mb-3">
-              <div className="w-9 h-9 rounded-lg bg-foreground flex items-center justify-center">
-                {settings.workspace_logo_url ? (
-                  <img src={settings.workspace_logo_url} alt="Workspace Logo" className="w-9 h-9 rounded-lg object-cover" />
-                ) : (
+              {settings.workspace_logo_url ? (
+                <img src={settings.workspace_logo_url} alt="Workspace Logo" className="w-9 h-9 rounded-lg object-contain" />
+              ) : (
+                <div className="w-9 h-9 rounded-lg bg-foreground flex items-center justify-center">
                   <FileText className="w-5 h-5 text-background" />
-                )}
-              </div>
+                </div>
+              )}
               <h1 className="text-2xl font-bold tracking-tight text-foreground">Docmoc</h1>
             </div>
             <p className="text-sm text-muted-foreground mt-1">
