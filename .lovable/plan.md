@@ -1,122 +1,51 @@
 
+Goal: fix the broken “Copy link” behavior inside the document modal, make newly generated links auto-copy reliably, and default share edit time to the user’s current local datetime.
 
-# Plan: Fix Build Errors + Modernize UI/UX
+What I found
+- The working “Shared by Me” page copies directly from `doc.share_token`, and that flow is fine.
+- In `DocumentViewer.tsx`, the modal copy relies on local optimistic state (`optimisticShareToken`) and the share dialog closes immediately after mutate success. If the returned token is missing/stale during that render cycle, the copy action ends up using an empty/null value, which matches your “copies blank” symptom.
+- The current “Edit share settings” already uses current local time only when no prior expiry exists. Your requested behavior is stronger: every time you open edit settings, default the datetime input to the user’s current local time for easier updating.
+- There are also React ref warnings in the console from route transition usage. They may not be the root cause of clipboard failure, but I’ll clean related recent UI regressions while touching this area.
 
-## Part 1: Fix Build Errors
+Implementation plan
 
-### 1. Remove leftover Supabase files
-Delete `src/integrations/supabase/client.ts` and `src/integrations/supabase/types.ts` — no code imports them, but TypeScript still compiles them and fails on the missing `@supabase/supabase-js` module.
+1. Make share-link state reliable in `DocumentViewer.tsx`
+- Replace the current token derivation with a single explicit `shareUrl` state or a safer computed source that never resolves to blank.
+- On modal open, initialize share settings from the document, but do not depend on transient state for clipboard text.
+- Keep the last valid share token/url in state once generated so the copy action always has a concrete string.
 
-### 2. Fix `toggleShare` return type in DocumentViewer
-The `toggleShare` mutation in `useDocuments.ts` returns `void` because it doesn't pass through the return value from `api.toggleShare()`. Fix by returning the result from the mutation function, then access `data.share_token` in the `onSuccess` callback of `DocumentViewer.tsx` (line 127).
+2. Auto-copy immediately after generating/updating a share link
+- In the `toggleShare` success handler, generate the URL from the returned token, persist it in state, and copy that exact URL before closing the share settings dialog.
+- If clipboard API fails, keep the URL visible in the modal and show a clear fallback message instead of silently succeeding.
+- Keep the “Copy link” button working after the dialog closes by using the persisted URL/token.
 
-## Part 2: UI/UX Modernization
+3. Fix the modal “Copy link” button
+- Make the button copy from the persisted share URL/token, not from a maybe-empty optimistic chain.
+- Guard against null values and show an error toast only when there is truly no share URL available.
+- Ensure existing shared docs opened from “Shared by Me” still preload their current token and copy correctly.
 
-All changes are CSS/className-level. No logic or architecture changes.
+4. Default share edit time to current local time
+- Update `openShareSettings()` so the datetime field always starts at the user’s current local datetime when opening the share settings modal.
+- Keep backend validation unchanged so only future dates are accepted.
+- If needed, retain a subtle note in the UI that leaving the field as-is means “disable at current chosen time onward” to avoid confusion.
 
-### 3. Global styling upgrades (`src/index.css`)
-- Softer border colors (reduce opacity)
-- Smoother global transitions on interactive elements
-- Improved scrollbar styling (thin, subtle)
-- Better focus ring styles
-- Page-level fade-in animation for route content
-- Dropdown/popover entrance animations (scale + fade)
+5. Validate and clean recent UI-related regressions around this flow
+- Review the document modal/share dialog rendering after the recent UI overhaul to ensure the button hierarchy and dialog transitions are not interfering with clipboard-triggered user gestures.
+- Fix the React “Function components cannot be given refs” warning source if it touches the modal/login route transition setup, since it’s a recent UI regression and should be cleaned up while fixing this request.
 
-### 4. Dashboard stats cards (`DashboardStats.tsx`)
-- Glassmorphic/frosted card surfaces with subtle backdrop blur
-- Larger icon containers with gradient backgrounds
-- Better spacing, `rounded-xl`, softer shadows
-- Counter numbers with tabular-nums for alignment
-- Hover lift effect with shadow transition
+Files to update
+- `src/components/DocumentViewer.tsx` — main fix for copy behavior, auto-copy, and local datetime default
+- Possibly `src/lib/share.ts` — only if a safer clipboard helper/fallback is needed
+- Possibly `src/App.tsx` or whichever component introduced the ref warning during recent UI transition work
 
-### 5. Document cards (`DocumentCard.tsx`)
-- Softer preview area with subtle gradient overlay
-- Smoother hover shadow transition (shadow-md to shadow-xl)
-- Better tag pill styling with more padding
-- Improved date text with relative formatting
-- Border opacity reduced for softer feel
-- Subtle scale on hover (1.01)
+Validation I will do after implementation
+- Open a document that is not shared, generate a link, confirm it auto-copies the actual URL
+- Reopen the same document modal and confirm “Copy link” copies the same URL correctly
+- Open from “Shared by Me”, click Edit in modal, update settings, confirm it still copies correctly
+- Confirm the share datetime field opens with the user’s current local time
+- Re-test the working “Shared by Me” copy button to ensure no regression
+- Validate in preview directly, not just by code inspection
 
-### 6. Document list view (`DocumentListView.tsx`)
-- Remove hard borders, use subtle row dividers
-- Add hover background transition
-- On mobile: convert table rows to stacked card layout instead of hiding columns
-- Responsive gap and padding adjustments
-
-### 7. TopBar (`TopBar.tsx`)
-- Glassmorphic header with backdrop-blur
-- Search input with larger padding, subtle inner shadow
-- Smoother avatar hover ring effect
-- Upload button with subtle gradient
-
-### 8. Sidebar (`AppSidebar.tsx`)
-- Smoother hover transitions (150ms ease)
-- Active item with left accent border indicator
-- Better tag section spacing
-- Subtle backdrop blur on mobile overlay
-
-### 9. Login page (`Login.tsx`)
-- Centered card with soft shadow and border
-- Subtle background pattern/gradient
-- Input focus transitions
-- Button loading state with opacity pulse
-- Better vertical rhythm
-
-### 10. Settings page (`Settings.tsx`)
-- Section cards with hover border color transition
-- Better form spacing
-- Accent color buttons with ring indicator on hover
-- Smoother switch animation
-
-### 11. Admin page (`Admin.tsx`)
-- User rows with hover state
-- Better avatar gradient
-- Badge styling improvements
-- Modal improvements
-
-### 12. Trash, Shared, Recent pages
-- Consistent empty state illustrations
-- Better row hover states
-- Mobile-friendly action button layout (stack vertically on small screens)
-
-### 13. DocumentViewer modal (`DocumentViewer.tsx`)
-- Smoother open animation
-- Better panel divider styling
-- Improved note area with focused state
-- Tag pills with hover/remove animation
-- Fix the share_token type error (from Part 1)
-
-### 14. Mobile responsiveness improvements
-- **Sidebar**: already handles mobile overlay; add swipe gesture hint
-- **TopBar**: compact search on mobile, icon-only buttons
-- **Document grid**: single column on small screens with tighter cards
-- **List view**: stacked card layout on mobile instead of compressed table
-- **Trash/Shared pages**: stack action buttons below content on mobile
-- **Settings**: full-width sections, better touch targets (min 44px)
-- **Admin**: user cards instead of wide rows on mobile
-- **Modals**: full-screen on mobile with safe area padding
-
-## Files to modify
-
-| File | Changes |
-|------|---------|
-| `src/integrations/supabase/client.ts` | **Delete** |
-| `src/integrations/supabase/types.ts` | **Delete** |
-| `src/index.css` | Global animations, transitions, scrollbar, focus styles |
-| `tailwind.config.ts` | New keyframes, animation utilities |
-| `src/hooks/useDocuments.ts` | Return value from toggleShare mutation |
-| `src/components/DashboardStats.tsx` | Premium card styling |
-| `src/components/DocumentCard.tsx` | Softer surfaces, better hover, spacing |
-| `src/components/DocumentListView.tsx` | Mobile card layout, softer rows |
-| `src/components/TopBar.tsx` | Glassmorphic header, better search |
-| `src/components/AppSidebar.tsx` | Active indicator, smoother transitions |
-| `src/components/DocumentViewer.tsx` | Fix type error, better animations |
-| `src/pages/Login.tsx` | Card surface, gradient bg, better spacing |
-| `src/pages/Settings.tsx` | Section hover, better form rhythm |
-| `src/pages/Admin.tsx` | Mobile cards, hover states |
-| `src/pages/Trash.tsx` | Mobile stacked layout, hover states |
-| `src/pages/Shared.tsx` | Mobile stacked layout, hover states |
-| `src/pages/Recent.tsx` | Consistent page header styling |
-| `src/pages/AllDocuments.tsx` | Page header, animate-in for content |
-| `src/components/MainLayout.tsx` | Route transition wrapper |
-
+Technical notes
+- Root cause is most likely state timing/source-of-truth drift in `DocumentViewer`, not the clipboard helper itself, since the same helper already works in `Shared.tsx`.
+- Best fix is to make the modal copy flow derive from a persisted valid token/url returned by the API, and copy before closing the share settings dialog.
