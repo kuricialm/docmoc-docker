@@ -721,7 +721,7 @@ app.patch('/api/documents/:id/share', auth, (req, res) => {
     ? req.user.full_name.trim()
     : (typeof req.user.email === 'string' && req.user.email.trim())
       ? req.user.email.trim()
-      : null;
+      : req.user.id;
   db.prepare(`
     UPDATE documents
     SET shared = 1,
@@ -742,6 +742,11 @@ app.patch('/api/documents/:id/share', auth, (req, res) => {
     req.params.id,
     req.user.id,
   );
+  const persistedShareName = db.prepare('SELECT shared_by_name FROM documents WHERE id = ? AND user_id = ?')
+    .get(req.params.id, req.user.id);
+  if (!persistedShareName?.shared_by_name || !String(persistedShareName.shared_by_name).trim()) {
+    return res.status(500).json({ error: 'Failed to persist sharer name' });
+  }
   logDocumentEvent(req.params.id, req.user.id, existing.share_token ? 'share_updated' : 'share_enabled', { expiresAt: shareExpiresAt });
   if (expiryChanged) {
     logDocumentEvent(req.params.id, req.user.id, 'share_expiry_changed', {
