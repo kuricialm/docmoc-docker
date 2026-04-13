@@ -103,12 +103,17 @@ function normalizeUploadedFilename(filename) {
   const replacementCount = (value) => (value.match(/�/g) || []).length;
   const printableCount = (value) => (value.match(/[\p{L}\p{N}\s._\-()[\]]/gu) || []).length;
   const decodeLatin1ToUtf8 = (value) => Buffer.from(value, 'latin1').toString('utf8');
+  const hasMojibakeHints = (value) => matchCount(value, mojibakeRegex) >= 3;
 
   const candidates = [trimmed];
   const firstPass = decodeLatin1ToUtf8(trimmed);
   candidates.push(firstPass);
   const secondPass = decodeLatin1ToUtf8(firstPass);
   if (secondPass !== firstPass) candidates.push(secondPass);
+  if (hasMojibakeHints(trimmed) && /[\r\n]/.test(trimmed)) {
+    const controlRecovered = trimmed.replace(/\r\n|\r|\n/g, '\x85');
+    candidates.push(decodeLatin1ToUtf8(controlRecovered));
+  }
 
   const score = (value) => (
     matchCount(value, arabicRegex) * 4 +
