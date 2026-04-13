@@ -106,6 +106,13 @@ export async function updatePassword(_userId: string, newPassword: string): Prom
   });
 }
 
+export async function updateEmail(_userId: string, email: string): Promise<void> {
+  await apiFetch('/profile/email', {
+    method: 'PATCH',
+    body: JSON.stringify({ email }),
+  });
+}
+
 export async function createUser(email: string, password: string, fullName: string, role: 'admin' | 'user'): Promise<User> {
   const u = await apiFetch<any>('/users', {
     method: 'POST',

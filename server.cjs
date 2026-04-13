@@ -202,6 +202,21 @@ app.patch('/api/profile/password', auth, (req, res) => {
   res.json({ ok: true });
 });
 
+app.patch('/api/profile/email', auth, (req, res) => {
+  const { email } = req.body;
+  if (!email || typeof email !== 'string') return res.status(400).json({ error: 'Email is required' });
+  const nextEmail = email.trim().toLowerCase();
+  if (!nextEmail.includes('@')) return res.status(400).json({ error: 'Invalid email address' });
+
+  const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(nextEmail);
+  if (existing && existing.id !== req.user.id) {
+    return res.status(409).json({ error: 'Email is already in use' });
+  }
+
+  db.prepare('UPDATE users SET email = ? WHERE id = ?').run(nextEmail, req.user.id);
+  res.json({ ok: true });
+});
+
 app.post('/api/profile/logo', auth, upload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file' });
   const ext = extFromMime(req.file.mimetype);

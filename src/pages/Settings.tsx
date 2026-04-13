@@ -15,9 +15,15 @@ export default function SettingsPage() {
   const { resolvedTheme, setTheme } = useTheme();
 
   const [newPassword, setNewPassword] = useState('');
+  const [newEmail, setNewEmail] = useState(user?.email ?? '');
   const [passwordLoading, setPasswordLoading] = useState(false);
+  const [emailLoading, setEmailLoading] = useState(false);
   const [logoUploading, setLogoUploading] = useState(false);
   const [registrationEnabled, setRegistrationEnabled] = useState(true);
+
+  useEffect(() => {
+    setNewEmail(user?.email ?? '');
+  }, [user?.email]);
 
   useEffect(() => {
     if (isAdmin) {
@@ -37,6 +43,30 @@ export default function SettingsPage() {
       toast.error(err.message);
     }
     setPasswordLoading(false);
+  };
+
+  const handleEmailChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+    const normalizedEmail = newEmail.trim().toLowerCase();
+    if (!normalizedEmail) {
+      toast.error('Email is required');
+      return;
+    }
+    if (normalizedEmail === user.email) {
+      toast.message('Email is already up to date');
+      return;
+    }
+
+    setEmailLoading(true);
+    try {
+      await api.updateEmail(user.id, normalizedEmail);
+      await refreshProfile();
+      toast.success('Email updated');
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+    setEmailLoading(false);
   };
 
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -90,6 +120,19 @@ export default function SettingsPage() {
           </div>
         </section>
       )}
+
+      <section className="bg-card border rounded-lg p-6 space-y-4">
+        <h3 className="text-sm font-semibold">Change Email</h3>
+        <form onSubmit={handleEmailChange} className="space-y-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">New Email</Label>
+            <Input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="Enter new email" required className="h-9" />
+          </div>
+          <Button type="submit" size="sm" disabled={emailLoading}>
+            {emailLoading ? 'Updating...' : 'Update Email'}
+          </Button>
+        </form>
+      </section>
 
       <section className="bg-card border rounded-lg p-6 space-y-4">
         <h3 className="text-sm font-semibold">Change Password</h3>
