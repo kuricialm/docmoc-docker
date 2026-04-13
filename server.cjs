@@ -165,8 +165,9 @@ function extFromMime(mime) {
 }
 
 function logDocumentEvent(documentId, userId, action, details = null) {
+  const serializedDetails = details && typeof details === 'object' ? JSON.stringify(details) : null;
   db.prepare('INSERT INTO document_history (id, document_id, user_id, action, details, created_at) VALUES (?,?,?,?,?,?)')
-    .run(uid(), documentId, userId, action, details ? JSON.stringify(details) : null, now());
+    .run(uid(), documentId, userId, action, serializedDetails, now());
 }
 
 function getOwnedDocument(documentId, userId) {
@@ -598,6 +599,7 @@ app.patch('/api/documents/:id/restore', auth, (req, res) => {
 app.delete('/api/documents/:id', auth, (req, res) => {
   const doc = db.prepare('SELECT storage_path FROM documents WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
   if (!doc) return res.status(404).json({ error: 'Not found' });
+  logDocumentEvent(req.params.id, req.user.id, 'permanently_deleted');
   const filePath = path.join(DATA_DIR, doc.storage_path);
   try { fs.unlinkSync(filePath); } catch (_) {}
   try { fs.rmdirSync(path.dirname(filePath)); } catch (_) {}
@@ -769,8 +771,12 @@ app.get('/api/documents/:id/history', auth, (req, res) => {
     FROM document_history h
     LEFT JOIN users u ON u.id = h.user_id
     WHERE h.document_id = ?
+      AND EXISTS (
+        SELECT 1 FROM documents d
+        WHERE d.id = h.document_id AND d.user_id = ?
+      )
     ORDER BY h.created_at DESC
-  `).all(req.params.id);
+  `).all(req.params.id, req.user.id);
   res.json(rows.map((r) => {
     let parsedDetails = null;
     if (r.details) {
