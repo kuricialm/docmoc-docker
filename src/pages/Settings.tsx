@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
 import { ImageOff } from 'lucide-react';
+import { useLocalSettings } from '@/hooks/useLocalSettings';
 
 const ACCENT_COLORS = ['#000000', '#3B82F6', '#6366F1', '#8B5CF6', '#EC4899', '#EF4444', '#F59E0B', '#22C55E', '#06B6D4'];
 const Section = ({ children, className = '' }: { children: React.ReactNode; className?: string }) => (
@@ -16,6 +17,7 @@ const Section = ({ children, className = '' }: { children: React.ReactNode; clas
 );
 
 export default function SettingsPage() {
+  const { settings: localSettings, update: updateLocalSettings } = useLocalSettings();
   const { user, profile, refreshProfile, isAdmin, signOut, appSettings, refreshSettings } = useAuth();
 
   const [newPassword, setNewPassword] = useState('');
