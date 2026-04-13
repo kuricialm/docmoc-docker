@@ -1,33 +1,28 @@
 
 
-## Consolidated Plan: 6 Fixes + Sort & Build Error
+## Plan: Fix Shared Document Page
 
-### 1. Tag mutation — invalidate documents query
-**File: `src/hooks/useTags.ts`** — Already invalidates `['documents']`. Confirmed working.
+### 1. Remove the "Shared by" info bar (purple highlight)
+**File: `src/pages/SharedDocument.tsx` (lines 151-156)** — Delete the entire `<div className="rounded-xl border bg-card ...">` block that shows "Shared by / Unknown user".
 
-### 2. Always sort by upload date
-**File: `server.cjs` (~line 482)** — Change default sort from `updated_at` to `created_at`:
+### 2. Fix "Unknown user" — show actual sharer's name
+**File: `server.cjs` (lines 929-935)** — The public shared endpoint runs a SQL JOIN that correctly resolves the user's full name from the `users` table (line 904-906), but then overrides it with potentially-empty snapshot fields (lines 929-930). Fix: use the JOIN-resolved values instead of snapshots.
+
 ```js
-const orderBy = sortBy === 'updated' ? 'updated_at' : 'created_at';
+// Before (broken):
+const uploadedByName = resolveDisplayName(doc.uploaded_by_name_snapshot);
+const sharedByName = resolveDisplayName(doc.shared_by_name_snapshot);
+
+// After (uses JOIN result, falls back to snapshot):
+const uploadedByName = doc.uploaded_by_name || resolveDisplayName(doc.uploaded_by_name_snapshot);
+const sharedByName = doc.shared_by_name || resolveDisplayName(doc.shared_by_name_snapshot);
 ```
 
-### 3. Fix `replaceAll` build error + ensure history captures all actions
-**File: `src/components/DocumentViewer.tsx` (line 314)** — Replace `action.replaceAll('_', ' ')` with `action.split('_').join(' ')`. Server already logs all actions (upload, rename, star, share, tags, notes, trash, restore).
+The SQL already aliases the JOIN columns as `uploaded_by_name` and `shared_by_name` with proper `COALESCE` logic, so these will contain the correct name. The snapshot is kept as fallback only.
 
-### 4. Card date format: "Apr 13, 2026"
-**File: `src/components/DocumentCard.tsx`** — Add `year: 'numeric'` to `toLocaleDateString`.
-
-### 5. Remove "Modified" date from card
-**File: `src/components/DocumentCard.tsx`** — Remove the Modified line.
-
-### 6. Overhaul drag-and-drop
-- **`src/pages/AllDocuments.tsx`** — Remove all drag-drop handling
-- **`src/components/MainLayout.tsx`** — Add full-panel drag-drop overlay with frosted glass (`backdrop-blur-sm`, `bg-background/60`), centered upload icon, minimal "Drop to upload" text. Covers entire right panel excluding sidebar. Responsive for mobile.
+Also remove `uploaded_by_name_snapshot` and `shared_by_name_snapshot` from the response spread to avoid leaking internal fields — strip them before sending.
 
 ### Files modified
-- `server.cjs`
-- `src/components/DocumentViewer.tsx`
-- `src/components/DocumentCard.tsx`
-- `src/pages/AllDocuments.tsx`
-- `src/components/MainLayout.tsx`
+- `src/pages/SharedDocument.tsx` — remove "Shared by" card (6 lines)
+- `server.cjs` — use JOIN-resolved names instead of snapshots (~2 lines)
 
