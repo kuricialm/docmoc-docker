@@ -903,7 +903,7 @@ app.get('/api/shared/:token', (req, res) => {
   const doc = db.prepare(`
     SELECT d.*,
            COALESCE(NULLIF(TRIM(u.full_name), ''), u.email, 'Unknown user') AS uploaded_by_name,
-           COALESCE(NULLIF(TRIM(s.full_name), ''), s.email, NULLIF(TRIM(u.full_name), ''), u.email, 'Unknown user') AS shared_by_name
+           COALESCE(NULLIF(TRIM(s.full_name), ''), s.email, NULLIF(TRIM(u.full_name), ''), u.email, 'Unknown user') AS shared_by_user_name
     FROM documents d
     LEFT JOIN users u ON u.id = d.user_id
     LEFT JOIN users s ON s.id = COALESCE(d.shared_by_user_id, d.user_id)
@@ -926,12 +926,14 @@ app.get('/api/shared/:token', (req, res) => {
     SELECT t.id, t.name, t.color FROM tags t
     JOIN document_tags dt ON dt.tag_id = t.id WHERE dt.document_id = ?
   `).all(doc.id);
-  const { uploaded_by_name_snapshot, shared_by_name_snapshot, share_password_hash, shared_by_user_id, ...safeDoc } = doc;
+  const uploadedByName = resolveDisplayName(doc.uploaded_by_name_snapshot, doc.uploaded_by_name);
+  const sharedByName = resolveDisplayName(doc.shared_by_name_snapshot, doc.shared_by_user_name, uploadedByName);
+  const { uploaded_by_name_snapshot, shared_by_name_snapshot, share_password_hash, shared_by_user_id, shared_by_user_name, ...safeDoc } = doc;
   res.json({
     ...safeDoc,
     name: normalizeUploadedFilename(doc.name),
-    uploaded_by_name: doc.uploaded_by_name,
-    shared_by_name: doc.shared_by_name,
+    uploaded_by_name: uploadedByName,
+    shared_by_name: sharedByName,
     starred: !!doc.starred,
     trashed: false,
     shared: true,
