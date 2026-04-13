@@ -1,5 +1,6 @@
 import { getFileTypeInfo } from '@/lib/fileTypes';
 import { Button } from '@/components/ui/button';
+import { LayoutGrid, List, RotateCcw } from 'lucide-react';
 import {
   Pagination,
   PaginationContent,
@@ -20,6 +21,8 @@ import type { SortBy } from '@/hooks/useDocumentBrowse';
 import type { Tag } from '@/hooks/useTags';
 
 type Props = {
+  viewMode: 'grid' | 'list';
+  onViewModeChange: (mode: 'grid' | 'list') => void;
   dateFilter: DateFilter;
   onDateFilterChange: (value: DateFilter) => void;
   sortBy: SortBy;
@@ -48,13 +51,15 @@ const dateOptions: { value: DateFilter; label: string }[] = [
 ];
 
 const sortOptions: { value: SortBy; label: string }[] = [
-  { value: 'created_desc', label: 'Upload date: newest to oldest' },
-  { value: 'created_asc', label: 'Upload date: oldest to newest' },
-  { value: 'updated_desc', label: 'Modified date: newest to oldest' },
-  { value: 'updated_asc', label: 'Modified date: oldest to newest' },
+  { value: 'created_desc', label: 'Upload: Newest first' },
+  { value: 'created_asc', label: 'Upload: Oldest first' },
+  { value: 'updated_desc', label: 'Modified: Newest first' },
+  { value: 'updated_asc', label: 'Modified: Oldest first' },
 ];
 
 export default function DocumentBrowseToolbar({
+  viewMode,
+  onViewModeChange,
   dateFilter,
   onDateFilterChange,
   sortBy,
@@ -130,11 +135,46 @@ export default function DocumentBrowseToolbar({
             </Select>
           </div>
 
-          <div className="flex items-center justify-between lg:justify-end gap-3">
+          <div className="flex items-center justify-between lg:justify-end gap-2 sm:gap-3">
             <p className="text-xs text-muted-foreground">
               Showing <span className="font-medium text-foreground">{totalResults}</span> of {totalBaseResults}
             </p>
-            <Button variant="ghost" size="sm" onClick={onResetFilters}>Clear filters</Button>
+            <div className="flex items-center gap-1 sm:gap-2">
+              <div className="flex items-center rounded-lg border border-border/60 bg-muted/50 p-0.5">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className={`h-7 w-7 rounded-md ${viewMode === 'grid' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground'}`}
+                  onClick={() => onViewModeChange('grid')}
+                  aria-label="Grid view"
+                >
+                  <LayoutGrid className="h-3.5 w-3.5" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className={`h-7 w-7 rounded-md ${viewMode === 'list' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground'}`}
+                  onClick={() => onViewModeChange('list')}
+                  aria-label="List view"
+                >
+                  <List className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={onResetFilters}
+                aria-label="Clear filters"
+                title="Clear filters"
+              >
+                <RotateCcw className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         </div>
       </div>

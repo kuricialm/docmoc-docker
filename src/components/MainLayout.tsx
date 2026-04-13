@@ -13,7 +13,7 @@ import AdminPage from '@/pages/Admin';
 import { useDocumentMutations } from '@/hooks/useDocuments';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { ACCEPTED_UPLOAD_ATTR, isAcceptedUploadFile } from '@/lib/fileTypes';
-import { Upload } from 'lucide-react';
+import { Upload, UploadCloud } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function MainLayout() {
@@ -115,8 +115,6 @@ export default function MainLayout() {
         onDrop={handleDrop}
       >
         <TopBar
-          viewMode={viewMode}
-          onViewModeChange={setViewMode}
           search={search}
           onSearchChange={setSearch}
           onUpload={handleUpload}
@@ -125,12 +123,12 @@ export default function MainLayout() {
         />
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
           <Routes>
-            <Route path="/" element={<AllDocuments viewMode={viewMode} search={search} uploadTrigger={uploadTrigger} />} />
-            <Route path="/recent" element={<RecentPage viewMode={viewMode} search={search} />} />
-            <Route path="/starred" element={<StarredPage viewMode={viewMode} search={search} />} />
+            <Route path="/" element={<AllDocuments viewMode={viewMode} onViewModeChange={setViewMode} search={search} uploadTrigger={uploadTrigger} />} />
+            <Route path="/recent" element={<RecentPage viewMode={viewMode} onViewModeChange={setViewMode} search={search} />} />
+            <Route path="/starred" element={<StarredPage viewMode={viewMode} onViewModeChange={setViewMode} search={search} />} />
             <Route path="/shared" element={<SharedPage search={search} />} />
             <Route path="/trash" element={<TrashPage search={search} />} />
-            <Route path="/tag/:tagId" element={<TagView viewMode={viewMode} search={search} />} />
+            <Route path="/tag/:tagId" element={<TagView viewMode={viewMode} onViewModeChange={setViewMode} search={search} />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/admin" element={<AdminPage />} />
           </Routes>
@@ -138,11 +136,12 @@ export default function MainLayout() {
 
         {isDraggingFiles && (
           <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center bg-background/60 backdrop-blur-sm">
-            <div className="flex flex-col items-center gap-3 rounded-2xl border border-border/50 bg-card/90 px-10 py-8 shadow-2xl backdrop-blur-md">
-              <div className="rounded-full bg-primary/10 p-4">
-                <Upload className="h-8 w-8 text-primary" />
+            <div className="flex w-full max-w-sm flex-col items-center gap-3 rounded-3xl border border-border/70 bg-card/90 px-10 py-10 text-center shadow-2xl backdrop-blur-md">
+              <div className="rounded-2xl border border-border/70 bg-background/80 p-4">
+                <UploadCloud className="h-8 w-8 text-foreground/80" />
               </div>
-              <p className="text-sm font-medium text-foreground">Drop to upload</p>
+              <h3 className="text-lg font-semibold tracking-tight text-foreground">Upload files</h3>
+              <p className="text-sm text-muted-foreground">Drop files anywhere to add them instantly.</p>
             </div>
           </div>
         )}

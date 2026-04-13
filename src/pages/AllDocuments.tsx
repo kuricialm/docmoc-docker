@@ -12,11 +12,12 @@ import { FileText } from 'lucide-react';
 
 type Props = {
   viewMode: 'grid' | 'list';
+  onViewModeChange: (mode: 'grid' | 'list') => void;
   search: string;
   uploadTrigger?: number;
 };
 
-export default function AllDocuments({ viewMode, search }: Props) {
+export default function AllDocuments({ viewMode, onViewModeChange, search }: Props) {
   const { data: allDocs = [] } = useDocuments({ sortBy: 'created' });
   const { data: trashedDocs = [] } = useDocuments({ trashed: true });
   const { data: tags = [] } = useTags();
@@ -51,6 +52,8 @@ export default function AllDocuments({ viewMode, search }: Props) {
       <DashboardStats documents={[...allDocs, ...trashedDocs]} />
 
       <DocumentBrowseToolbar
+        viewMode={viewMode}
+        onViewModeChange={onViewModeChange}
         dateFilter={dateFilter}
         onDateFilterChange={setDateFilter}
         sortBy={sortBy}
