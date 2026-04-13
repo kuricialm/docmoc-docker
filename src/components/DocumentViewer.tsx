@@ -24,9 +24,44 @@ type Props = {
   onClose: () => void;
 };
 
+const ARABIC_REGEX = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/g;
+const MOJIBAKE_REGEX = /[ÃØÙÐÑ][\u0080-\u00FF]?/g;
+
+const countMatches = (value: string, regex: RegExp) => (value.match(regex) || []).length;
+const hasArabic = (value: string) => countMatches(value, ARABIC_REGEX) > 0;
+
+const repairUtf8Mojibake = (value: string) => {
+  const arabicCount = countMatches(value, ARABIC_REGEX);
+  const mojibakeCount = countMatches(value, MOJIBAKE_REGEX);
+  if (arabicCount > 0 || mojibakeCount < 3) return value;
+  const bytes = Uint8Array.from(value, (char) => char.charCodeAt(0) & 0xff);
+  const repaired = new TextDecoder('utf-8').decode(bytes);
+  return hasArabic(repaired) ? repaired : value;
+};
+
+const pickBestTextDecode = (bytes: Uint8Array) => {
+  const utf8 = new TextDecoder('utf-8').decode(bytes);
+  const candidates = [utf8, repairUtf8Mojibake(utf8)];
+  try {
+    candidates.push(new TextDecoder('windows-1256').decode(bytes));
+  } catch {
+    // no-op when decoder is not available in runtime
+  }
+
+  const score = (value: string) => {
+    const arabicCount = countMatches(value, ARABIC_REGEX);
+    const replacementCount = (value.match(/�/g) || []).length;
+    const mojibakeCount = countMatches(value, MOJIBAKE_REGEX);
+    return arabicCount * 3 - replacementCount * 5 - mojibakeCount;
+  };
+
+  return candidates.sort((a, b) => score(b) - score(a))[0];
+};
+
 export default function DocumentViewer({ document: doc, open, onClose }: Props) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [textContent, setTextContent] = useState<string | null>(null);
+  const [textIsArabic, setTextIsArabic] = useState(false);
   const [noteText, setNoteText] = useState('');
   const [optimisticStarred, setOptimisticStarred] = useState(false);
   const [optimisticTags, setOptimisticTags] = useState<Document['tags']>([]);
@@ -71,22 +106,28 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
     if (!doc || !open) {
       setPreviewUrl(null);
       setTextContent(null);
+      setTextIsArabic(false);
       return;
     }
 
+    let objectUrl: string | null = null;
     const loadPreview = async () => {
       const blob = await api.getDocumentBlob(doc.id);
       if (!blob) return;
       if (doc.file_type === 'text/plain') {
-        setTextContent(await blob.text());
+        const bytes = new Uint8Array(await blob.arrayBuffer());
+        const bestText = pickBestTextDecode(bytes);
+        setTextContent(bestText);
+        setTextIsArabic(hasArabic(bestText));
       } else if (doc.file_type === 'application/pdf' || isImageType(doc.file_type)) {
-        setPreviewUrl(URL.createObjectURL(blob));
+        objectUrl = URL.createObjectURL(blob);
+        setPreviewUrl(objectUrl);
       }
     };
     loadPreview();
 
     return () => {
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [doc, open]);
 
@@ -269,7 +310,13 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
               {doc.file_type === 'application/pdf' && previewUrl ? (
                 <iframe src={previewUrl} className="w-full h-full rounded-lg border border-border/30" title="PDF Preview" />
               ) : doc.file_type === 'text/plain' && textContent !== null ? (
-                <pre className="w-full h-full overflow-auto p-4 text-sm font-mono bg-card rounded-lg border border-border/30 whitespace-pre-wrap">{textContent}</pre>
+                <pre
+                  className="w-full h-full overflow-auto p-4 text-sm bg-card rounded-lg border border-border/30 whitespace-pre-wrap"
+                  dir={textIsArabic ? 'rtl' : 'ltr'}
+                  style={textIsArabic ? { fontFamily: "'Noto Sans Arabic', sans-serif" } : undefined}
+                >
+                  {textContent}
+                </pre>
               ) : isImageType(doc.file_type) && previewUrl ? (
                 <img src={previewUrl} alt={doc.name} className="max-w-full max-h-full object-contain rounded-lg" />
               ) : (
