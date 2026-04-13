@@ -8,6 +8,8 @@ import { toast } from 'sonner';
 import DocumentViewer from '@/components/DocumentViewer';
 import { copyTextToClipboard, getSharedDocumentUrl } from '@/lib/share';
 import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
+import { hasArabicCharacters } from '@/lib/text';
 
 type Props = { search: string };
 
@@ -60,7 +62,13 @@ export default function SharedPage({ search }: Props) {
               <div className="flex items-center gap-3 sm:gap-4">
                 <FileTypeIcon fileType={doc.file_type} size="sm" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate cursor-pointer hover:text-primary transition-colors duration-150" onClick={() => setViewDocId(doc.id)}>{doc.name}</p>
+                  <p
+                    className={cn('text-sm font-medium truncate cursor-pointer hover:text-primary transition-colors duration-150', hasArabicCharacters(doc.name) && 'font-arabic-text')}
+                    dir={hasArabicCharacters(doc.name) ? 'rtl' : 'ltr'}
+                    onClick={() => setViewDocId(doc.id)}
+                  >
+                    {doc.name}
+                  </p>
                   <p className="text-xs text-muted-foreground/70 mt-0.5">{formatFileSize(doc.file_size)}</p>
                   <div className="flex flex-wrap gap-1.5 mt-1.5">
                     {!doc.share_expires_at && !doc.share_has_password && <Badge variant="secondary" className="text-[10px]">Public</Badge>}

@@ -1,4 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@400;500;600;700&display=swap');
 
 @tailwind base;
@@ -107,6 +108,10 @@
 @layer utilities {
   .transition-smooth {
     @apply transition-all duration-200 ease-out;
+  }
+
+  .font-arabic-text {
+    font-family: 'Noto Sans Arabic', 'Noto Sans', sans-serif;
   }
 }
 

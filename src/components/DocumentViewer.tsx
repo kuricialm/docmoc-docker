@@ -17,6 +17,7 @@ import FileTypeIcon from './FileTypeIcon';
 import { useDocumentMutations } from '@/hooks/useDocuments';
 import { toast } from 'sonner';
 import { copyTextToClipboard, getSharedDocumentUrl } from '@/lib/share';
+import { hasArabicCharacters } from '@/lib/text';
 
 type Props = {
   document: Document | null;
@@ -301,7 +302,9 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
               <button onClick={handleToggleStar} className="p-1.5 rounded-lg hover:bg-secondary transition-all duration-150" aria-label={optimisticStarred ? 'Unstar document' : 'Star document'}>
                 <Star className={`w-4 h-4 transition-colors duration-150 ${optimisticStarred ? 'text-amber-400 fill-amber-400' : 'text-muted-foreground/30'}`} />
               </button>
-              <DialogTitle className="text-base font-semibold truncate flex-1">{doc.name}</DialogTitle>
+              <DialogTitle className={`text-base font-semibold truncate flex-1 ${hasArabicCharacters(doc.name) ? 'font-arabic-text' : ''}`} dir={hasArabicCharacters(doc.name) ? 'rtl' : 'ltr'}>
+                {doc.name}
+              </DialogTitle>
             </div>
           </DialogHeader>
 
@@ -311,9 +314,8 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
                 <iframe src={previewUrl} className="w-full h-full rounded-lg border border-border/30" title="PDF Preview" />
               ) : doc.file_type === 'text/plain' && textContent !== null ? (
                 <pre
-                  className="w-full h-full overflow-auto p-4 text-sm bg-card rounded-lg border border-border/30 whitespace-pre-wrap"
                   dir={textIsArabic ? 'rtl' : 'ltr'}
-                  style={textIsArabic ? { fontFamily: "'Noto Sans Arabic', sans-serif" } : undefined}
+                  className={`w-full h-full overflow-auto p-4 text-sm bg-card rounded-lg border border-border/30 whitespace-pre-wrap ${textIsArabic ? 'font-arabic-text' : ''}`}
                 >
                   {textContent}
                 </pre>
