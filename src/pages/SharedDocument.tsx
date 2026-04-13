@@ -7,6 +7,7 @@ import { getFileTypeInfo, formatFileSize, isImageType } from '@/lib/fileTypes';
 import FileTypeIcon from '@/components/FileTypeIcon';
 import * as api from '@/lib/api';
 import { useTheme } from 'next-themes';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function SharedDocument() {
   const { token } = useParams<{ token: string }>();
@@ -21,6 +22,7 @@ export default function SharedDocument() {
   const [unlocking, setUnlocking] = useState(false);
   const { resolvedTheme, setTheme } = useTheme();
   const isDark = resolvedTheme === 'dark';
+  const { appSettings } = useAuth();
 
   const loadDocument = async (password?: string, options?: { keepContentVisible?: boolean }) => {
     if (!token) return;
@@ -114,9 +116,13 @@ export default function SharedDocument() {
   return (
     <div className="min-h-screen bg-background">
       <header className="h-14 border-b bg-card flex items-center px-6 gap-3">
-        <div className="w-7 h-7 rounded-md bg-primary flex items-center justify-center">
-          <FileText className="w-4 h-4 text-primary-foreground" />
-        </div>
+        {appSettings.workspace_logo_url ? (
+          <img src={appSettings.workspace_logo_url} alt="Workspace Logo" className="w-7 h-7 rounded-md object-cover" />
+        ) : (
+          <div className="w-7 h-7 rounded-md bg-primary flex items-center justify-center">
+            <FileText className="w-4 h-4 text-primary-foreground" />
+          </div>
+        )}
         <span className="text-sm font-semibold">Docmoc</span>
         <span className="text-xs text-muted-foreground ml-2">Shared Document</span>
         <div className="ml-auto flex items-center gap-2">
