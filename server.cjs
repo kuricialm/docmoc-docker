@@ -926,10 +926,11 @@ app.get('/api/shared/:token', (req, res) => {
     SELECT t.id, t.name, t.color FROM tags t
     JOIN document_tags dt ON dt.tag_id = t.id WHERE dt.document_id = ?
   `).all(doc.id);
-  const uploadedByName = resolveDisplayName(doc.uploaded_by_name_snapshot);
-  const sharedByName = resolveDisplayName(doc.shared_by_name_snapshot);
+  const uploadedByName = doc.uploaded_by_name || resolveDisplayName(doc.uploaded_by_name_snapshot);
+  const sharedByName = doc.shared_by_name || resolveDisplayName(doc.shared_by_name_snapshot);
+  const { uploaded_by_name_snapshot, shared_by_name_snapshot, share_password_hash, ...safeDoc } = doc;
   res.json({
-    ...doc,
+    ...safeDoc,
     name: normalizeUploadedFilename(doc.name),
     uploaded_by_name: uploadedByName,
     shared_by_name: sharedByName,
