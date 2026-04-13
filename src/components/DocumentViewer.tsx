@@ -178,6 +178,18 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
     );
   };
 
+  const handleCreateShareLink = () => {
+    if (shareMode === 'expires' && !expiresAt) {
+      toast.error('Please choose an expiration date and time');
+      return;
+    }
+    if (shareMode === 'password' && sharePassword.length < 4) {
+      toast.error('Password must be at least 4 characters');
+      return;
+    }
+    handleToggleShare(shareMode);
+  };
+
   return (
     <>
       <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
