@@ -6,6 +6,7 @@ import { formatFileSize } from '@/lib/fileTypes';
 import FileTypeIcon from '@/components/FileTypeIcon';
 import { toast } from 'sonner';
 import DocumentViewer from '@/components/DocumentViewer';
+import { copyTextToClipboard, getSharedDocumentUrl } from '@/lib/share';
 
 type Props = { search: string };
 
@@ -17,9 +18,13 @@ export default function SharedPage({ search }: Props) {
   const filtered = docs.filter((d) => d.name.toLowerCase().includes(search.toLowerCase()));
   const viewDoc = useMemo(() => docs.find((doc) => doc.id === viewDocId) ?? null, [docs, viewDocId]);
 
-  const copyLink = (token: string) => {
-    navigator.clipboard.writeText(`${window.location.origin}/shared/${token}`);
-    toast.success('Link copied');
+  const copyLink = async (token: string) => {
+    try {
+      await copyTextToClipboard(getSharedDocumentUrl(token));
+      toast.success('Link copied');
+    } catch {
+      toast.error('Failed to copy link');
+    }
   };
 
   return (

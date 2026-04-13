@@ -12,6 +12,7 @@ import { X, Download, Share2, Copy, Star, Plus } from 'lucide-react';
 import FileTypeIcon from './FileTypeIcon';
 import { useDocumentMutations } from '@/hooks/useDocuments';
 import { toast } from 'sonner';
+import { copyTextToClipboard, getSharedDocumentUrl } from '@/lib/share';
 
 type Props = {
   document: Document | null;
@@ -68,7 +69,7 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
   if (!doc) return null;
   const typeInfo = getFileTypeInfo(doc.file_type);
   const shareUrl = optimisticShared && optimisticShareToken
-    ? `${window.location.origin}/shared/${optimisticShareToken}`
+    ? getSharedDocumentUrl(optimisticShareToken)
     : null;
   const docTagIds = optimisticTags?.map((t) => t.id) || [];
   const availableTags = allTags?.filter((t) => !docTagIds.includes(t.id)) || [];
@@ -78,10 +79,14 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
     toast.success('Note saved');
   };
 
-  const handleCopyLink = () => {
+  const handleCopyLink = async () => {
     if (shareUrl) {
-      navigator.clipboard.writeText(shareUrl);
-      toast.success('Link copied');
+      try {
+        await copyTextToClipboard(shareUrl);
+        toast.success('Link copied');
+      } catch {
+        toast.error('Failed to copy link');
+      }
     }
   };
 

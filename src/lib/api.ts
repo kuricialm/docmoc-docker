@@ -333,3 +333,9 @@ export async function uploadLogo(_userId: string, file: File): Promise<string> {
   const data = await res.json();
   return data.url;
 }
+
+export async function removeLogo(_userId: string): Promise<void> {
+  await apiFetch('/profile/logo', {
+    method: 'DELETE',
+  });
+}

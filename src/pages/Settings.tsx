@@ -6,19 +6,19 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
-import { useTheme } from 'next-themes';
+import { ImageOff } from 'lucide-react';
 
-const ACCENT_COLORS = ['#3B82F6', '#6366F1', '#8B5CF6', '#EC4899', '#EF4444', '#F59E0B', '#22C55E', '#06B6D4'];
+const ACCENT_COLORS = ['#000000', '#3B82F6', '#6366F1', '#8B5CF6', '#EC4899', '#EF4444', '#F59E0B', '#22C55E', '#06B6D4'];
 
 export default function SettingsPage() {
   const { user, profile, refreshProfile, isAdmin, signOut } = useAuth();
-  const { resolvedTheme, setTheme } = useTheme();
 
   const [newPassword, setNewPassword] = useState('');
   const [newEmail, setNewEmail] = useState(user?.email ?? '');
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [emailLoading, setEmailLoading] = useState(false);
   const [logoUploading, setLogoUploading] = useState(false);
+  const [logoRemoving, setLogoRemoving] = useState(false);
   const [registrationEnabled, setRegistrationEnabled] = useState(true);
 
   useEffect(() => { setNewEmail(user?.email ?? ''); }, [user?.email]);
@@ -77,6 +77,19 @@ export default function SettingsPage() {
       refreshProfile();
       toast.success('Accent color updated');
     } catch { toast.error('Failed to update accent color'); }
+  };
+
+  const handleLogoRemove = async () => {
+    if (!user) return;
+    setLogoRemoving(true);
+    try {
+      await api.removeLogo(user.id);
+      await refreshProfile();
+      toast.success('Logo removed');
+    } catch {
+      toast.error('Failed to remove logo');
+    }
+    setLogoRemoving(false);
   };
 
   const handleRegistrationToggle = async (enabled: boolean) => {
@@ -143,25 +156,19 @@ export default function SettingsPage() {
           {profile?.workspace_logo_url ? (
             <img src={profile.workspace_logo_url} alt="Logo" className="w-12 h-12 rounded-xl object-cover border border-border" />
           ) : (
-            <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center text-muted-foreground text-xs">No logo</div>
+            <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center text-muted-foreground">
+              <ImageOff className="w-5 h-5" />
+            </div>
           )}
-          <div>
+          <div className="flex items-center gap-2">
             <input type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" id="logo-upload" />
             <Button variant="outline" size="sm" className="rounded-lg" onClick={() => document.getElementById('logo-upload')?.click()} disabled={logoUploading}>
               {logoUploading ? 'Uploading...' : 'Upload Logo'}
             </Button>
+            <Button variant="ghost" size="sm" className="rounded-lg" onClick={handleLogoRemove} disabled={!profile?.workspace_logo_url || logoRemoving}>
+              {logoRemoving ? 'Removing...' : 'Remove Logo'}
+            </Button>
           </div>
-        </div>
-      </Section>
-
-      <Section>
-        <h3 className="text-sm font-semibold">Appearance</h3>
-        <div className="flex items-center justify-between gap-4">
-          <div className="space-y-1">
-            <p className="text-sm font-medium">Dark mode</p>
-            <p className="text-xs text-muted-foreground">Use a darker color palette across the app.</p>
-          </div>
-          <Switch checked={resolvedTheme === 'dark'} onCheckedChange={(checked) => setTheme(checked ? 'dark' : 'light')} />
         </div>
       </Section>
 

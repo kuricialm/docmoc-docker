@@ -253,11 +253,29 @@ app.post('/api/profile/logo', auth, upload.single('file'), (req, res) => {
   const ext = extFromMime(req.file.mimetype);
   const logoDir = path.join(DATA_DIR, 'logos');
   fs.mkdirSync(logoDir, { recursive: true });
+  for (const file of fs.readdirSync(logoDir)) {
+    if (file.startsWith(`${req.user.id}.`)) {
+      fs.rmSync(path.join(logoDir, file), { force: true });
+    }
+  }
   const logoPath = path.join(logoDir, `${req.user.id}.${ext}`);
   fs.renameSync(req.file.path, logoPath);
   const url = `/api/profile/logo/${req.user.id}.${ext}`;
   db.prepare('UPDATE users SET workspace_logo_url = ? WHERE id = ?').run(url, req.user.id);
   res.json({ url });
+});
+
+app.delete('/api/profile/logo', auth, (req, res) => {
+  const logoDir = path.join(DATA_DIR, 'logos');
+  if (fs.existsSync(logoDir)) {
+    for (const file of fs.readdirSync(logoDir)) {
+      if (file.startsWith(`${req.user.id}.`)) {
+        fs.rmSync(path.join(logoDir, file), { force: true });
+      }
+    }
+  }
+  db.prepare('UPDATE users SET workspace_logo_url = NULL WHERE id = ?').run(req.user.id);
+  res.json({ ok: true });
 });
 
 app.get('/api/profile/logo/:filename', (req, res) => {
