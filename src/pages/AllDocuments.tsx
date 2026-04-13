@@ -19,7 +19,7 @@ type Props = {
 };
 
 export default function AllDocuments({ viewMode, search }: Props) {
-  const { data: allDocs = [] } = useDocuments();
+  const { data: allDocs = [] } = useDocuments({ sortBy: 'created' });
   const { data: trashedDocs = [] } = useDocuments({ trashed: true });
   const { data: tags = [] } = useTags();
   const { uploadDocument } = useDocumentMutations();

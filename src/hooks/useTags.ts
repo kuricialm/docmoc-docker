@@ -29,6 +29,7 @@ export function useTagMutations() {
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['tags'] });
     qc.invalidateQueries({ queryKey: ['documents'] });
+    qc.invalidateQueries({ queryKey: ['document-history'] });
   };
 
   const createTag = useMutation({

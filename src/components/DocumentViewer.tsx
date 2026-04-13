@@ -12,12 +12,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { X, Download, Share2, Copy, Star, Plus, UserX } from 'lucide-react';
+import { X, Download, Share2, Copy, Star, Plus, UserX, History } from 'lucide-react';
 import FileTypeIcon from './FileTypeIcon';
-import { useDocumentMutations } from '@/hooks/useDocuments';
+import { useDocumentHistory, useDocumentMutations } from '@/hooks/useDocuments';
 import { toast } from 'sonner';
 import { copyTextToClipboard, getSharedDocumentUrl } from '@/lib/share';
 import { hasArabicCharacters } from '@/lib/text';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 type Props = {
   document: Document | null;
@@ -77,6 +78,7 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
   const generatedTokenRef = useRef<string | null>(null);
 
   const { data: note } = useDocumentNote(doc?.id);
+  const { data: history = [] } = useDocumentHistory(doc?.id);
   const { upsertNote } = useNoteMutations();
   const { downloadDocument, toggleShare, toggleStar } = useDocumentMutations();
   const { data: allTags } = useTags();
@@ -292,6 +294,25 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
   };
 
   const hasShareUrl = !!resolveShareUrl();
+  const formatDateTime = (v: string) => new Date(v).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+  const getHistoryLabel = (action: string, details: Record<string, unknown> | null) => {
+    const map: Record<string, string> = {
+      uploaded: 'Uploaded file',
+      renamed: `Renamed${details?.to ? ` to "${details.to}"` : ''}`,
+      starred: 'Starred',
+      unstarred: 'Unstarred',
+      deleted: 'Moved to trash',
+      restored: 'Restored from trash',
+      share_enabled: 'Sharing enabled',
+      share_updated: 'Share settings updated',
+      share_disabled: 'Sharing disabled',
+      tag_added: `Added tag${details?.tagName ? ` "${details.tagName}"` : ''}`,
+      tag_removed: `Removed tag${details?.tagName ? ` "${details.tagName}"` : ''}`,
+      note_added: 'Added comment',
+      note_updated: 'Edited comment',
+    };
+    return map[action] || action.replaceAll('_', ' ');
+  };
 
   return (
     <>
@@ -331,46 +352,9 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
               )}
             </div>
 
-            <div className="w-full lg:w-80 border-t lg:border-t-0 lg:border-l border-border/40 flex flex-col overflow-y-auto">
-              <div className="p-4 sm:p-5 space-y-4 border-b border-border/30">
-                <h3 className="text-[10px] font-medium text-muted-foreground uppercase tracking-widest">Details</h3>
-                <div className="space-y-3 text-sm">
-                  <div className="flex justify-between"><span className="text-muted-foreground">Type</span><span className="font-medium px-1.5 py-0.5 rounded-md text-xs" style={{ color: typeInfo.color, backgroundColor: typeInfo.bgColor }}>{typeInfo.label}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Size</span><span>{formatFileSize(doc.file_size)}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Uploaded</span><span>{new Date(doc.created_at).toLocaleDateString()}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Modified</span><span>{new Date(doc.updated_at).toLocaleDateString()}</span></div>
-                </div>
-              </div>
-
-              <div className="p-4 sm:p-5 space-y-2.5 border-b border-border/30">
-                <h3 className="text-[10px] font-medium text-muted-foreground uppercase tracking-widest">Tags</h3>
-                <div className="flex flex-wrap gap-1.5 items-center">
-                  {optimisticTags?.map((tag) => (
-                    <span key={tag.id} className="inline-flex items-center gap-1 text-[11px] pl-2 pr-1 py-0.5 rounded-full font-medium transition-all duration-150 hover:shadow-sm" style={{ backgroundColor: `${tag.color}18`, color: tag.color }}>
-                      {tag.name}
-                      <button onClick={() => handleRemoveTag(tag.id)} className="p-0.5 rounded-full hover:bg-black/10 transition-colors duration-150"><X className="w-2.5 h-2.5" /></button>
-                    </span>
-                  ))}
-                  {availableTags.length > 0 && (
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <button className="w-6 h-6 rounded-full border border-dashed border-muted-foreground/20 flex items-center justify-center hover:border-primary hover:text-primary transition-all duration-150"><Plus className="w-3 h-3" /></button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-48 p-1.5" align="start">
-                        {availableTags.map((tag) => (
-                          <button key={tag.id} onClick={() => handleAddTag(tag.id)} className="flex items-center gap-2 w-full px-2.5 py-2 rounded-lg text-sm hover:bg-secondary transition-colors duration-150">
-                            <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: tag.color }} />
-                            {tag.name}
-                          </button>
-                        ))}
-                      </PopoverContent>
-                    </Popover>
-                  )}
-                </div>
-              </div>
-
+            <div className="w-full lg:w-80 border-t lg:border-t-0 lg:border-l border-border/40 flex flex-col overflow-y-auto bg-card/30">
               <div className="p-4 sm:p-5 space-y-3 border-b border-border/30">
-                <h3 className="text-[10px] font-medium text-muted-foreground uppercase tracking-widest">Actions</h3>
+                <h3 className="text-[10px] font-medium text-muted-foreground uppercase tracking-widest">Quick Actions</h3>
                 <div className="flex items-center gap-2 flex-wrap">
                   <TooltipProvider>
                     <Tooltip>
@@ -413,11 +397,75 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
                 </div>
               </div>
 
-              <div className="p-4 sm:p-5 flex-1 flex flex-col">
-                <h3 className="text-[10px] font-medium text-muted-foreground uppercase tracking-widest mb-2.5">Private Notes</h3>
-                <Textarea value={noteText} onChange={(e) => setNoteText(e.target.value)} placeholder="Add private notes about this document..." className="flex-1 min-h-[100px] resize-none text-sm rounded-lg border-border/40 focus:border-primary/30" />
-                <Button size="sm" className="mt-2.5 self-end rounded-lg" onClick={handleSaveNote}>Save Note</Button>
-              </div>
+              <Tabs defaultValue="details" className="flex-1 flex flex-col min-h-0">
+                <div className="px-4 sm:px-5 pt-3">
+                  <TabsList className="w-full grid grid-cols-3">
+                    <TabsTrigger value="details">Details</TabsTrigger>
+                    <TabsTrigger value="notes">Notes</TabsTrigger>
+                    <TabsTrigger value="history">History</TabsTrigger>
+                  </TabsList>
+                </div>
+
+                <TabsContent value="details" className="px-4 sm:px-5 pb-5 pt-4 mt-0 space-y-5 overflow-y-auto">
+                  <div className="space-y-3 text-sm">
+                    <div className="flex justify-between gap-2"><span className="text-muted-foreground">Type</span><span className="font-medium px-1.5 py-0.5 rounded-md text-xs" style={{ color: typeInfo.color, backgroundColor: typeInfo.bgColor }}>{typeInfo.label}</span></div>
+                    <div className="flex justify-between gap-2"><span className="text-muted-foreground">Size</span><span>{formatFileSize(doc.file_size)}</span></div>
+                    <div className="flex justify-between gap-2"><span className="text-muted-foreground">Uploaded at</span><span className="text-right">{formatDateTime(doc.created_at)}</span></div>
+                    <div className="flex justify-between gap-2"><span className="text-muted-foreground">Modified at</span><span className="text-right">{formatDateTime(doc.updated_at)}</span></div>
+                  </div>
+
+                  <div className="space-y-2.5">
+                    <h3 className="text-[10px] font-medium text-muted-foreground uppercase tracking-widest">Tags</h3>
+                    <div className="flex flex-wrap gap-1.5 items-center">
+                      {optimisticTags?.map((tag) => (
+                        <span key={tag.id} className="inline-flex items-center gap-1 text-[11px] pl-2 pr-1 py-0.5 rounded-full font-medium transition-all duration-150 hover:shadow-sm" style={{ backgroundColor: `${tag.color}18`, color: tag.color }}>
+                          {tag.name}
+                          <button onClick={() => handleRemoveTag(tag.id)} className="p-0.5 rounded-full hover:bg-black/10 transition-colors duration-150"><X className="w-2.5 h-2.5" /></button>
+                        </span>
+                      ))}
+                      {availableTags.length > 0 && (
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <button className="w-6 h-6 rounded-full border border-dashed border-muted-foreground/20 flex items-center justify-center hover:border-primary hover:text-primary transition-all duration-150"><Plus className="w-3 h-3" /></button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-48 p-1.5" align="start">
+                            {availableTags.map((tag) => (
+                              <button key={tag.id} onClick={() => handleAddTag(tag.id)} className="flex items-center gap-2 w-full px-2.5 py-2 rounded-lg text-sm hover:bg-secondary transition-colors duration-150">
+                                <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: tag.color }} />
+                                {tag.name}
+                              </button>
+                            ))}
+                          </PopoverContent>
+                        </Popover>
+                      )}
+                    </div>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="notes" className="px-4 sm:px-5 pb-5 pt-4 mt-0 flex-1 flex flex-col">
+                  <Textarea value={noteText} onChange={(e) => setNoteText(e.target.value)} placeholder="Add private notes about this document..." className="flex-1 min-h-[160px] resize-none text-sm rounded-lg border-border/40 focus:border-primary/30" />
+                  <Button size="sm" className="mt-2.5 self-end rounded-lg" onClick={handleSaveNote}>Save Note</Button>
+                </TabsContent>
+
+                <TabsContent value="history" className="px-4 sm:px-5 pb-5 pt-4 mt-0 overflow-y-auto">
+                  <div className="space-y-2">
+                    {history.length === 0 && (
+                      <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">No audit events yet.</div>
+                    )}
+                    {history.map((event) => (
+                      <div key={event.id} className="rounded-xl border border-border/50 bg-background/80 p-3">
+                        <div className="flex items-start gap-2">
+                          <History className="w-3.5 h-3.5 mt-0.5 text-primary" />
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium leading-tight">{getHistoryLabel(event.action, event.details)}</p>
+                            <p className="text-xs text-muted-foreground mt-1">{event.actor_name} • {formatDateTime(event.created_at)}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </TabsContent>
+              </Tabs>
             </div>
           </div>
         </DialogContent>

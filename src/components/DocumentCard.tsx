@@ -93,9 +93,10 @@ export default function DocumentCard({ document: doc, onView, onRename }: Props)
           </div>
         )}
 
-        <p className="text-[11px] text-muted-foreground/60">
-          {new Date(doc.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-        </p>
+        <div className="text-[11px] text-muted-foreground/70 space-y-0.5">
+          <p>Uploaded: {new Date(doc.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p>
+          <p>Modified: {new Date(doc.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p>
+        </div>
       </div>
     </div>
   );

@@ -46,6 +46,16 @@ export type NoteRecord = {
   updated_at: string;
 };
 
+export type DocumentHistoryRecord = {
+  id: string;
+  document_id: string;
+  user_id: string;
+  action: string;
+  details: Record<string, unknown> | null;
+  created_at: string;
+  actor_name: string;
+};
+
 export type AppSettings = {
   registration_enabled: boolean;
   workspace_logo_url?: string | null;
@@ -182,6 +192,7 @@ export type DocFilter = {
   tagId?: string;
   recent?: boolean;
   recentLimit?: number;
+  sortBy?: 'updated' | 'created';
 };
 
 export async function uploadDocument(_userId: string, file: File): Promise<DocRecord & { tags: TagRecord[] }> {
@@ -207,6 +218,7 @@ export async function getDocuments(_userId: string, filter?: DocFilter): Promise
   if (filter?.tagId) params.set('tagId', filter.tagId);
   if (filter?.recent) params.set('recent', 'true');
   if (filter?.recentLimit !== undefined) params.set('recentLimit', String(filter.recentLimit));
+  if (filter?.sortBy) params.set('sortBy', filter.sortBy);
   return apiFetch(`/documents?${params.toString()}`);
 }
 
@@ -291,6 +303,10 @@ export async function getSharedDocumentBlob(token: string, password?: string): P
   } catch {
     return undefined;
   }
+}
+
+export async function getDocumentHistory(documentId: string): Promise<DocumentHistoryRecord[]> {
+  return apiFetch(`/documents/${documentId}/history`);
 }
 
 // ---------- Tags ----------
