@@ -92,6 +92,29 @@ function normalizeEmail(email) {
   return email.trim().toLowerCase();
 }
 
+function normalizeUploadedFilename(filename) {
+  if (typeof filename !== 'string') return 'document';
+  const trimmed = filename.trim();
+  if (!trimmed) return 'document';
+
+  const arabicRegex = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/g;
+  const mojibakeRegex = /[ÃØÙÐÑ][\u0080-\u00FF]?/g;
+  const matchCount = (value, regex) => (value.match(regex) || []).length;
+
+  const utf8Candidate = Buffer.from(trimmed, 'latin1').toString('utf8');
+  const originalArabic = matchCount(trimmed, arabicRegex);
+  const decodedArabic = matchCount(utf8Candidate, arabicRegex);
+  const originalMojibake = matchCount(trimmed, mojibakeRegex);
+  const decodedMojibake = matchCount(utf8Candidate, mojibakeRegex);
+
+  const decodeLooksBetter = (
+    decodedArabic > originalArabic ||
+    (decodedArabic > 0 && decodedMojibake < originalMojibake)
+  );
+
+  return decodeLooksBetter ? utf8Candidate : trimmed;
+}
+
 function isValidPassword(password) {
   return typeof password === 'string' && password.length >= 4;
 }
@@ -457,7 +480,7 @@ app.post('/api/documents/upload', auth, upload.single('file'), (req, res) => {
   fs.renameSync(req.file.path, path.join(DATA_DIR, storagePath));
 
   const doc = {
-    id, user_id: req.user.id, name: req.file.originalname,
+    id, user_id: req.user.id, name: normalizeUploadedFilename(req.file.originalname),
     file_type: req.file.mimetype || 'application/octet-stream',
     file_size: req.file.size, storage_path: storagePath,
     starred: 0, trashed: 0, trashed_at: null, shared: 0, share_token: null,
