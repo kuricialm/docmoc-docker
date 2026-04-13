@@ -22,8 +22,10 @@ export default function SettingsPage() {
 
   const [newPassword, setNewPassword] = useState('');
   const [newEmail, setNewEmail] = useState(user?.email ?? '');
+  const [displayName, setDisplayName] = useState(profile?.full_name ?? '');
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [emailLoading, setEmailLoading] = useState(false);
+  const [displayNameLoading, setDisplayNameLoading] = useState(false);
   const [logoUploading, setLogoUploading] = useState(false);
   const [logoRemoving, setLogoRemoving] = useState(false);
   const [faviconUploading, setFaviconUploading] = useState(false);
@@ -31,6 +33,7 @@ export default function SettingsPage() {
   const [registrationEnabled, setRegistrationEnabled] = useState(true);
 
   useEffect(() => { setNewEmail(user?.email ?? ''); }, [user?.email]);
+  useEffect(() => { setDisplayName(profile?.full_name ?? ''); }, [profile?.full_name]);
 
   useEffect(() => {
     if (isAdmin) {
@@ -65,6 +68,29 @@ export default function SettingsPage() {
       toast.success('Email updated');
     } catch (err: any) { toast.error(err.message); }
     setEmailLoading(false);
+  };
+
+  const handleDisplayNameChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+    const trimmed = displayName.trim();
+    if (!trimmed) {
+      toast.error('Display name is required');
+      return;
+    }
+    if (trimmed === (profile?.full_name || '').trim()) {
+      toast.message('Display name is already up to date');
+      return;
+    }
+    setDisplayNameLoading(true);
+    try {
+      await api.updateProfile(user.id, { fullName: trimmed });
+      await refreshProfile();
+      toast.success('Display name updated');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update display name');
+    }
+    setDisplayNameLoading(false);
   };
 
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -154,31 +180,46 @@ export default function SettingsPage() {
       )}
 
       <Section>
-        <h3 className="text-sm font-semibold">Change Email</h3>
-        <form onSubmit={handleEmailChange} className="space-y-3">
+        <h3 className="text-sm font-semibold">Display Name</h3>
+        <form onSubmit={handleDisplayNameChange} className="space-y-3">
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">New Email</Label>
-            <Input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="Enter new email" required className="h-10 rounded-lg" />
+            <Label className="text-xs text-muted-foreground">Full Name</Label>
+            <Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Enter your display name" required className="h-10 rounded-lg" />
           </div>
-          <Button type="submit" size="sm" className="rounded-lg" disabled={emailLoading}>
-            {emailLoading ? 'Updating...' : 'Update Email'}
+          <Button type="submit" size="sm" className="rounded-lg" disabled={displayNameLoading}>
+            {displayNameLoading ? 'Updating...' : 'Update Name'}
           </Button>
         </form>
       </Section>
 
-      <Section>
-        <h3 className="text-sm font-semibold">Change Password</h3>
-        <form onSubmit={handlePasswordChange} className="space-y-3">
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">New Password</Label>
-            <Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Enter new password" required minLength={6} className="h-10 rounded-lg" />
-          </div>
-          <p className="text-xs text-muted-foreground">You will be signed out after changing your password.</p>
-          <Button type="submit" size="sm" className="rounded-lg" disabled={passwordLoading}>
-            {passwordLoading ? 'Updating...' : 'Update Password'}
-          </Button>
-        </form>
-      </Section>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <Section>
+          <h3 className="text-sm font-semibold">Change Email</h3>
+          <form onSubmit={handleEmailChange} className="space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">New Email</Label>
+              <Input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="Enter new email" required className="h-10 rounded-lg" />
+            </div>
+            <Button type="submit" size="sm" className="rounded-lg" disabled={emailLoading}>
+              {emailLoading ? 'Updating...' : 'Update Email'}
+            </Button>
+          </form>
+        </Section>
+
+        <Section>
+          <h3 className="text-sm font-semibold">Change Password</h3>
+          <form onSubmit={handlePasswordChange} className="space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">New Password</Label>
+              <Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Enter new password" required minLength={6} className="h-10 rounded-lg" />
+            </div>
+            <p className="text-xs text-muted-foreground">You will be signed out after changing your password.</p>
+            <Button type="submit" size="sm" className="rounded-lg" disabled={passwordLoading}>
+              {passwordLoading ? 'Updating...' : 'Update Password'}
+            </Button>
+          </form>
+        </Section>
+      </div>
 
       {isAdmin && (
         <Section>

@@ -10,6 +10,7 @@ import { useTheme } from 'next-themes';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import { hasArabicCharacters } from '@/lib/text';
+import { resolveDisplayName } from '@/lib/identity';
 
 export default function SharedDocument() {
   const { token } = useParams<{ token: string }>();
@@ -99,6 +100,7 @@ export default function SharedDocument() {
   if (!doc) return <div className="min-h-screen flex items-center justify-center"><p className="text-muted-foreground text-sm">Document not found or no longer shared</p></div>;
 
   const typeInfo = getFileTypeInfo(doc.file_type);
+  const sharedByName = resolveDisplayName(doc.shared_by_name, doc.uploaded_by_name);
 
   const handleDownload = async () => {
     try {
@@ -144,6 +146,12 @@ export default function SharedDocument() {
               {doc.name}
             </h1>
             <p className="text-xs text-muted-foreground">{typeInfo.label} — {formatFileSize(doc.file_size)}</p>
+          </div>
+        </div>
+        <div className="rounded-xl border bg-card px-4 py-3 text-sm">
+          <div className="flex justify-between gap-3">
+            <span className="text-muted-foreground">Shared by</span>
+            <span className="text-right">{sharedByName}</span>
           </div>
         </div>
         <div className="bg-card border rounded-xl overflow-hidden min-h-[60vh] flex items-center justify-center">

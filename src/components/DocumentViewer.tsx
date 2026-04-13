@@ -19,6 +19,8 @@ import { toast } from 'sonner';
 import { copyTextToClipboard, getSharedDocumentUrl } from '@/lib/share';
 import { hasArabicCharacters } from '@/lib/text';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useAuth } from '@/contexts/AuthContext';
+import { resolveDisplayName } from '@/lib/identity';
 
 type Props = {
   document: Document | null;
@@ -61,6 +63,7 @@ const pickBestTextDecode = (bytes: Uint8Array) => {
 };
 
 export default function DocumentViewer({ document: doc, open, onClose }: Props) {
+  const { profile } = useAuth();
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [textContent, setTextContent] = useState<string | null>(null);
   const [textIsArabic, setTextIsArabic] = useState(false);
@@ -298,6 +301,7 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
   };
 
   const hasShareUrl = !!resolveShareUrl();
+  const uploadedByLabel = resolveDisplayName(doc.uploaded_by_name, profile?.full_name, profile?.email);
   const formatDateTime = (v: string) => new Date(v).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
   const getHistoryLabel = (action: string, details: Record<string, unknown> | null) => {
     const map: Record<string, string> = {
@@ -421,6 +425,7 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
                   <div className="space-y-3 text-sm">
                     <div className="flex justify-between gap-2"><span className="text-muted-foreground">Type</span><span className="font-medium px-1.5 py-0.5 rounded-md text-xs" style={{ color: typeInfo.color, backgroundColor: typeInfo.bgColor }}>{typeInfo.label}</span></div>
                     <div className="flex justify-between gap-2"><span className="text-muted-foreground">Size</span><span>{formatFileSize(doc.file_size)}</span></div>
+                    <div className="flex justify-between gap-2"><span className="text-muted-foreground">Uploaded by</span><span className="text-right">{uploadedByLabel}</span></div>
                     <div className="flex justify-between gap-2"><span className="text-muted-foreground">Uploaded at</span><span className="text-right">{formatDateTime(doc.created_at)}</span></div>
                     <div className="flex justify-between gap-2"><span className="text-muted-foreground">Modified at</span><span className="text-right">{formatDateTime(doc.updated_at)}</span></div>
                   </div>
