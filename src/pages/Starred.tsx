@@ -4,6 +4,7 @@ import DocumentCard from '@/components/DocumentCard';
 import DocumentListView from '@/components/DocumentListView';
 import DocumentViewer from '@/components/DocumentViewer';
 import RenameDialog from '@/components/RenameDialog';
+import { Star } from 'lucide-react';
 
 type Props = { viewMode: 'grid' | 'list'; search: string };
 
@@ -16,12 +17,15 @@ export default function StarredPage({ viewMode, search }: Props) {
   const viewDoc = useMemo(() => docs.find((doc) => doc.id === viewDocId) ?? null, [docs, viewDocId]);
 
   return (
-    <div className="space-y-6">
-      <h2 className="text-lg font-semibold">Starred</h2>
+    <div className="space-y-6 animate-page-in">
+      <h2 className="text-xl font-semibold tracking-tight">Starred</h2>
       {filtered.length === 0 ? (
-        <p className="text-sm text-muted-foreground text-center py-20">No starred documents</p>
+        <div className="text-center py-20">
+          <Star className="w-10 h-10 text-muted-foreground/20 mx-auto mb-3" />
+          <p className="text-sm text-muted-foreground">No starred documents</p>
+        </div>
       ) : viewMode === 'grid' ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
           {filtered.map((doc) => <DocumentCard key={doc.id} document={doc} onView={(selected) => setViewDocId(selected.id)} onRename={setRenameDoc} />)}
         </div>
       ) : (
