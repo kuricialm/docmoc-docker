@@ -40,9 +40,9 @@ export function useDocumentBrowse(documents: Document[], search: string, options
       if (dateFilter !== 'any') {
         const days = Number(dateFilter);
         if (Number.isFinite(days)) {
-          const updatedAt = new Date(doc.updated_at).getTime();
+          const createdAt = new Date(doc.created_at).getTime();
           const daysMs = days * 24 * 60 * 60 * 1000;
-          if (now - updatedAt > daysMs) return false;
+          if (now - createdAt > daysMs) return false;
         }
       }
 

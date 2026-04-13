@@ -46,12 +46,13 @@ export function useDocuments(filter?: {
   sortBy?: 'updated' | 'created';
 }) {
   const { user } = useAuth();
+  const normalizedFilter = { sortBy: 'created' as const, ...filter };
 
   return useQuery({
-    queryKey: ['documents', user?.id, filter],
+    queryKey: ['documents', user?.id, normalizedFilter],
     queryFn: async () => {
       if (!user) return [];
-      return (await api.getDocuments(user.id, filter)) as unknown as Document[];
+      return (await api.getDocuments(user.id, normalizedFilter)) as unknown as Document[];
     },
     enabled: !!user,
     refetchInterval: 1000,

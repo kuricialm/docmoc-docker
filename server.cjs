@@ -169,6 +169,10 @@ function logDocumentEvent(documentId, userId, action, details = null) {
     .run(uid(), documentId, userId, action, details ? JSON.stringify(details) : null, now());
 }
 
+function getOwnedDocument(documentId, userId) {
+  return db.prepare('SELECT * FROM documents WHERE id = ? AND user_id = ?').get(documentId, userId);
+}
+
 function ensureUploadHistoryEntry(documentId, userId) {
   const existing = db.prepare(`
     SELECT id FROM document_history
@@ -550,22 +554,31 @@ app.post('/api/documents/upload', auth, upload.single('file'), (req, res) => {
 
 app.patch('/api/documents/:id/rename', auth, (req, res) => {
   const { name } = req.body;
-  const existing = db.prepare('SELECT name FROM documents WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+  const existing = getOwnedDocument(req.params.id, req.user.id);
+  if (!existing) return res.status(404).json({ error: 'Not found' });
+  if (existing.name === name) return res.json({ ok: true });
   db.prepare('UPDATE documents SET name = ?, updated_at = ? WHERE id = ? AND user_id = ?')
     .run(name, now(), req.params.id, req.user.id);
-  if (existing) logDocumentEvent(req.params.id, req.user.id, 'renamed', { from: existing.name, to: name });
+  logDocumentEvent(req.params.id, req.user.id, 'renamed', { from: existing.name, to: name });
   res.json({ ok: true });
 });
 
 app.patch('/api/documents/:id/star', auth, (req, res) => {
   const { starred } = req.body;
+  const existing = getOwnedDocument(req.params.id, req.user.id);
+  if (!existing) return res.status(404).json({ error: 'Not found' });
+  const nextStarred = starred ? 1 : 0;
+  if (existing.starred === nextStarred) return res.json({ ok: true });
   db.prepare('UPDATE documents SET starred = ?, updated_at = ? WHERE id = ? AND user_id = ?')
-    .run(starred ? 1 : 0, now(), req.params.id, req.user.id);
+    .run(nextStarred, now(), req.params.id, req.user.id);
   logDocumentEvent(req.params.id, req.user.id, starred ? 'starred' : 'unstarred');
   res.json({ ok: true });
 });
 
 app.patch('/api/documents/:id/trash', auth, (req, res) => {
+  const existing = getOwnedDocument(req.params.id, req.user.id);
+  if (!existing) return res.status(404).json({ error: 'Not found' });
+  if (existing.trashed) return res.json({ ok: true });
   db.prepare('UPDATE documents SET trashed = 1, trashed_at = ?, updated_at = ? WHERE id = ? AND user_id = ?')
     .run(now(), now(), req.params.id, req.user.id);
   logDocumentEvent(req.params.id, req.user.id, 'deleted');
@@ -573,6 +586,9 @@ app.patch('/api/documents/:id/trash', auth, (req, res) => {
 });
 
 app.patch('/api/documents/:id/restore', auth, (req, res) => {
+  const existing = getOwnedDocument(req.params.id, req.user.id);
+  if (!existing) return res.status(404).json({ error: 'Not found' });
+  if (!existing.trashed) return res.json({ ok: true });
   db.prepare('UPDATE documents SET trashed = 0, trashed_at = NULL, updated_at = ? WHERE id = ? AND user_id = ?')
     .run(now(), req.params.id, req.user.id);
   logDocumentEvent(req.params.id, req.user.id, 'restored');
@@ -591,40 +607,58 @@ app.delete('/api/documents/:id', auth, (req, res) => {
 
 app.patch('/api/documents/:id/share', auth, (req, res) => {
   const { shared, config } = req.body;
-  const existing = db.prepare('SELECT id, share_token FROM documents WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+  const existing = getOwnedDocument(req.params.id, req.user.id);
   if (!existing) return res.status(404).json({ error: 'Not found' });
   if (!shared) {
+    if (!existing.shared) return res.json({ ok: true, share_token: null });
     db.prepare('UPDATE documents SET shared = 0, share_token = NULL, share_expires_at = NULL, share_password_hash = NULL, updated_at = ? WHERE id = ? AND user_id = ?')
       .run(now(), req.params.id, req.user.id);
     logDocumentEvent(req.params.id, req.user.id, 'share_disabled');
     return res.json({ ok: true, share_token: null });
   }
 
-  let shareExpiresAt = null;
-  let sharePasswordHash = null;
+  let shareExpiresAt = existing.share_expires_at || null;
+  let sharePasswordHash = existing.share_password_hash || null;
+  let passwordAction = null;
+  let expiryChanged = false;
 
-  if (config?.expiresAt) {
-    const parsedDate = new Date(config.expiresAt);
-    if (Number.isNaN(parsedDate.getTime()) || parsedDate.getTime() <= Date.now()) {
-      return res.status(400).json({ error: 'Expiration must be a future date/time' });
+  if (config && Object.prototype.hasOwnProperty.call(config, 'expiresAt')) {
+    if (config.expiresAt) {
+      const parsedDate = new Date(config.expiresAt);
+      if (Number.isNaN(parsedDate.getTime()) || parsedDate.getTime() <= Date.now()) {
+        return res.status(400).json({ error: 'Expiration must be a future date/time' });
+      }
+      shareExpiresAt = parsedDate.toISOString();
+    } else {
+      shareExpiresAt = null;
     }
-    shareExpiresAt = parsedDate.toISOString();
+    expiryChanged = (existing.share_expires_at || null) !== shareExpiresAt;
   }
 
-  if (config?.password) {
-    if (typeof config.password !== 'string' || config.password.length < 4) {
-      return res.status(400).json({ error: 'Password must be at least 4 characters' });
+  if (config && Object.prototype.hasOwnProperty.call(config, 'password')) {
+    if (config.password) {
+      if (typeof config.password !== 'string' || config.password.length < 4) {
+        return res.status(400).json({ error: 'Password must be at least 4 characters' });
+      }
+      sharePasswordHash = bcrypt.hashSync(config.password, 10);
+      passwordAction = existing.share_password_hash ? 'share_password_changed' : 'share_password_added';
+    } else if (config.password === '') {
+      sharePasswordHash = null;
+      if (existing.share_password_hash) passwordAction = 'share_password_removed';
     }
-    sharePasswordHash = bcrypt.hashSync(config.password, 10);
   }
 
   const shareToken = existing.share_token || uid();
   db.prepare('UPDATE documents SET shared = 1, share_token = ?, share_expires_at = ?, share_password_hash = ?, updated_at = ? WHERE id = ? AND user_id = ?')
     .run(shareToken, shareExpiresAt, sharePasswordHash, now(), req.params.id, req.user.id);
-  logDocumentEvent(req.params.id, req.user.id, existing.share_token ? 'share_updated' : 'share_enabled', {
-    hasPassword: !!sharePasswordHash,
-    expiresAt: shareExpiresAt,
-  });
+  logDocumentEvent(req.params.id, req.user.id, existing.share_token ? 'share_updated' : 'share_enabled', { expiresAt: shareExpiresAt });
+  if (expiryChanged) {
+    logDocumentEvent(req.params.id, req.user.id, 'share_expiry_changed', {
+      from: existing.share_expires_at || null,
+      to: shareExpiresAt,
+    });
+  }
+  if (passwordAction) logDocumentEvent(req.params.id, req.user.id, passwordAction);
   res.json({ ok: true, share_token: shareToken });
 });
 
@@ -674,23 +708,28 @@ app.delete('/api/tags/:id', auth, (req, res) => {
 });
 
 app.post('/api/documents/:docId/tags/:tagId', auth, (req, res) => {
+  const owned = getOwnedDocument(req.params.docId, req.user.id);
+  if (!owned) return res.status(404).json({ error: 'Not found' });
+  let result;
   try {
-    db.prepare('INSERT OR IGNORE INTO document_tags (document_id, tag_id) VALUES (?,?)')
+    result = db.prepare('INSERT OR IGNORE INTO document_tags (document_id, tag_id) VALUES (?,?)')
       .run(req.params.docId, req.params.tagId);
   } catch (_) {}
-  db.prepare('UPDATE documents SET updated_at = ? WHERE id = ? AND user_id = ?')
-    .run(now(), req.params.docId, req.user.id);
+  if (!result || result.changes === 0) return res.json({ ok: true });
+  db.prepare('UPDATE documents SET updated_at = ? WHERE id = ? AND user_id = ?').run(now(), req.params.docId, req.user.id);
   const tag = db.prepare('SELECT name FROM tags WHERE id = ? AND user_id = ?').get(req.params.tagId, req.user.id);
   logDocumentEvent(req.params.docId, req.user.id, 'tag_added', { tagName: tag?.name || req.params.tagId });
   res.json({ ok: true });
 });
 
 app.delete('/api/documents/:docId/tags/:tagId', auth, (req, res) => {
+  const owned = getOwnedDocument(req.params.docId, req.user.id);
+  if (!owned) return res.status(404).json({ error: 'Not found' });
   const tag = db.prepare('SELECT name FROM tags WHERE id = ? AND user_id = ?').get(req.params.tagId, req.user.id);
-  db.prepare('DELETE FROM document_tags WHERE document_id = ? AND tag_id = ?')
+  const result = db.prepare('DELETE FROM document_tags WHERE document_id = ? AND tag_id = ?')
     .run(req.params.docId, req.params.tagId);
-  db.prepare('UPDATE documents SET updated_at = ? WHERE id = ? AND user_id = ?')
-    .run(now(), req.params.docId, req.user.id);
+  if (result.changes === 0) return res.json({ ok: true });
+  db.prepare('UPDATE documents SET updated_at = ? WHERE id = ? AND user_id = ?').run(now(), req.params.docId, req.user.id);
   logDocumentEvent(req.params.docId, req.user.id, 'tag_removed', { tagName: tag?.name || req.params.tagId });
   res.json({ ok: true });
 });
@@ -704,6 +743,8 @@ app.get('/api/documents/:id/note', auth, (req, res) => {
 
 app.put('/api/documents/:id/note', auth, (req, res) => {
   const { content } = req.body;
+  const owned = getOwnedDocument(req.params.id, req.user.id);
+  if (!owned) return res.status(404).json({ error: 'Not found' });
   const existing = db.prepare('SELECT id FROM notes WHERE document_id = ? AND user_id = ?')
     .get(req.params.id, req.user.id);
   if (existing) {
@@ -715,7 +756,7 @@ app.put('/api/documents/:id/note', auth, (req, res) => {
   }
   db.prepare('UPDATE documents SET updated_at = ? WHERE id = ? AND user_id = ?')
     .run(now(), req.params.id, req.user.id);
-  logDocumentEvent(req.params.id, req.user.id, existing ? 'note_updated' : 'note_added');
+  logDocumentEvent(req.params.id, req.user.id, existing ? 'comment_edited' : 'comment_added');
   res.json({ ok: true });
 });
 
