@@ -944,7 +944,15 @@ app.get('/api/documents/:id/history', auth, (req, res) => {
 
 // ── Shared (no auth) ──
 app.get('/api/shared/:token', (req, res) => {
-  const doc = db.prepare('SELECT * FROM documents WHERE share_token = ? AND shared = 1 AND trashed = 0')
+  const doc = db.prepare(`
+    SELECT d.*,
+           COALESCE(NULLIF(TRIM(u.full_name), ''), u.email, 'Unknown user') AS uploaded_by_name,
+           COALESCE(NULLIF(TRIM(s.full_name), ''), s.email, NULLIF(TRIM(u.full_name), ''), u.email, 'Unknown user') AS shared_by_name
+    FROM documents d
+    LEFT JOIN users u ON u.id = d.user_id
+    LEFT JOIN users s ON s.id = COALESCE(d.shared_by_user_id, d.user_id)
+    WHERE d.share_token = ? AND d.shared = 1 AND d.trashed = 0
+  `)
     .get(req.params.token);
   if (!doc) return res.status(404).json({ error: 'Not found' });
   if (doc.share_expires_at && new Date(doc.share_expires_at).getTime() <= Date.now()) {
