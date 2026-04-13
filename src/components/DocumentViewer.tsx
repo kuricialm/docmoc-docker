@@ -29,11 +29,13 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
   const [optimisticStarred, setOptimisticStarred] = useState(false);
   const [optimisticTags, setOptimisticTags] = useState<Document['tags']>([]);
   const [optimisticShared, setOptimisticShared] = useState(false);
-  // Persisted share URL — set once from doc or after generate, never goes blank
-  const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [expiresAt, setExpiresAt] = useState('');
   const [sharePassword, setSharePassword] = useState('');
+
+  // Ref-based token that survives polling resets — this is the source of truth for copy
+  const generatedTokenRef = useRef<string | null>(null);
+
   const { data: note } = useDocumentNote(doc?.id);
   const { upsertNote } = useNoteMutations();
   const { downloadDocument, toggleShare, toggleStar } = useDocumentMutations();
@@ -43,6 +45,12 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
   const getLocalDateTime = () => {
     const local = new Date(Date.now() - new Date().getTimezoneOffset() * 60000);
     return local.toISOString().slice(0, 16);
+  };
+
+  // Resolve the best available share URL at call time
+  const resolveShareUrl = (): string | null => {
+    const token = generatedTokenRef.current || doc?.share_token;
+    return token ? getSharedDocumentUrl(token) : null;
   };
 
   useEffect(() => {
@@ -73,20 +81,28 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
     };
   }, [doc, open]);
 
+  // Sync from doc props — but never overwrite a locally generated token
   useEffect(() => {
     if (!doc) return;
     setOptimisticStarred(doc.starred);
     setOptimisticTags(doc.tags || []);
     setOptimisticShared(doc.shared);
-    // Initialize shareUrl from the document's existing token
-    if (doc.share_token) {
-      setShareUrl(getSharedDocumentUrl(doc.share_token));
-    } else {
-      setShareUrl(null);
+
+    // Only update the ref from doc if we don't already have a locally generated token
+    if (doc.share_token && !generatedTokenRef.current) {
+      generatedTokenRef.current = doc.share_token;
     }
+
     setExpiresAt(doc.share_expires_at ? doc.share_expires_at.slice(0, 16) : '');
     setSharePassword('');
   }, [doc]);
+
+  // Reset generated token ref when modal closes
+  useEffect(() => {
+    if (!open) {
+      generatedTokenRef.current = null;
+    }
+  }, [open]);
 
   if (!doc) return null;
   const typeInfo = getFileTypeInfo(doc.file_type);
@@ -99,12 +115,13 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
   };
 
   const handleCopyLink = async () => {
-    if (!shareUrl) {
+    const url = resolveShareUrl();
+    if (!url) {
       toast.error('No share link available');
       return;
     }
     try {
-      await copyTextToClipboard(shareUrl);
+      await copyTextToClipboard(url);
       toast.success('Link copied');
     } catch {
       toast.error('Failed to copy link');
@@ -139,13 +156,13 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
 
   const handleDisableSharing = () => {
     setOptimisticShared(false);
-    setShareUrl(null);
+    generatedTokenRef.current = null;
     toggleShare.mutate(
       { id: doc.id, shared: false },
       {
         onError: () => {
           setOptimisticShared(doc.shared);
-          if (doc.share_token) setShareUrl(getSharedDocumentUrl(doc.share_token));
+          if (doc.share_token) generatedTokenRef.current = doc.share_token;
         },
       },
     );
@@ -172,23 +189,25 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
           setShareDialogOpen(false);
 
           if (token) {
+            // Persist in ref so polling can't overwrite it
+            generatedTokenRef.current = token;
             const url = getSharedDocumentUrl(token);
-            // Persist the URL so copy button always works
-            setShareUrl(url);
             try {
               await copyTextToClipboard(url);
               toast.success('Share link generated & copied');
             } catch {
               toast.success('Share link generated');
             }
+          } else {
+            toast.error('Share enabled but no token returned');
           }
         },
         onError: () => {
           setOptimisticShared(doc.shared);
           if (doc.share_token) {
-            setShareUrl(getSharedDocumentUrl(doc.share_token));
+            generatedTokenRef.current = doc.share_token;
           } else {
-            setShareUrl(null);
+            generatedTokenRef.current = null;
           }
         },
       },
@@ -196,11 +215,12 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
   };
 
   const openShareSettings = () => {
-    // Always default to the user's current local datetime
     setExpiresAt(getLocalDateTime());
     setSharePassword('');
     setShareDialogOpen(true);
   };
+
+  const hasShareUrl = !!resolveShareUrl();
 
   return (
     <>
@@ -292,7 +312,7 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
                       <Share2 className="w-3.5 h-3.5" /> Share Link
                     </Button>
                   )}
-                  {shareUrl && (
+                  {hasShareUrl && (
                     <Button variant="ghost" size="sm" className="justify-start gap-2 text-xs text-muted-foreground rounded-lg" onClick={handleCopyLink}>
                       <Copy className="w-3.5 h-3.5" /> Copy link
                     </Button>

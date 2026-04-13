@@ -3,9 +3,15 @@ export function getSharedDocumentUrl(token: string): string {
 }
 
 export async function copyTextToClipboard(text: string): Promise<void> {
+  if (!text || !text.trim()) {
+    throw new Error('Nothing to copy');
+  }
+
+  const trimmed = text.trim();
+
   if (navigator.clipboard?.writeText) {
     try {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(trimmed);
       return;
     } catch {
       // Fall back to execCommand when Clipboard API is unavailable in the current context
@@ -13,7 +19,7 @@ export async function copyTextToClipboard(text: string): Promise<void> {
   }
 
   const textarea = document.createElement('textarea');
-  textarea.value = text;
+  textarea.value = trimmed;
   textarea.setAttribute('readonly', '');
   textarea.style.position = 'fixed';
   textarea.style.opacity = '0';
