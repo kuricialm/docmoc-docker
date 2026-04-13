@@ -46,6 +46,7 @@ export type NoteRecord = {
 
 export type AppSettings = {
   registration_enabled: boolean;
+  workspace_logo_url?: string | null;
 };
 
 // ---------- Fetch helper ----------

@@ -9,18 +9,22 @@ import { toast } from 'sonner';
 import { FileText } from 'lucide-react';
 
 export default function Login() {
-  const { signIn } = useAuth();
+  const { signIn, appSettings, refreshSettings } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const [registerMode, setRegisterMode] = useState(false);
-  const [settings, setSettings] = useState<api.AppSettings>({ registration_enabled: true });
+  const [settings, setSettings] = useState<api.AppSettings>({ registration_enabled: true, workspace_logo_url: null });
 
   useEffect(() => {
-    api.getSettings().then(setSettings).catch(() => {});
-  }, []);
+    refreshSettings();
+  }, [refreshSettings]);
+
+  useEffect(() => {
+    setSettings(appSettings);
+  }, [appSettings]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -60,7 +64,11 @@ export default function Login() {
           <div className="text-center mb-8">
             <div className="inline-flex items-center gap-2.5 mb-3">
               <div className="w-9 h-9 rounded-lg bg-foreground flex items-center justify-center">
-                <FileText className="w-5 h-5 text-background" />
+                {settings.workspace_logo_url ? (
+                  <img src={settings.workspace_logo_url} alt="Workspace Logo" className="w-9 h-9 rounded-lg object-cover" />
+                ) : (
+                  <FileText className="w-5 h-5 text-background" />
+                )}
               </div>
               <h1 className="text-2xl font-bold tracking-tight text-foreground">Docmoc</h1>
             </div>

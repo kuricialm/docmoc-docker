@@ -16,9 +16,11 @@ type AuthContextType = {
   loading: boolean;
   isAdmin: boolean;
   profile: Profile | null;
+  appSettings: api.AppSettings;
   signOut: () => void;
   signIn: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
   refreshProfile: () => void;
+  refreshSettings: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType>({
@@ -27,14 +29,16 @@ const AuthContext = createContext<AuthContextType>({
   loading: true,
   isAdmin: false,
   profile: null,
+  appSettings: { registration_enabled: true, workspace_logo_url: null },
   signOut: () => {},
   signIn: async () => {},
   refreshProfile: () => {},
+  refreshSettings: async () => {},
 });
 
 export const useAuth = () => useContext(AuthContext);
 
-const DEFAULT_PRIMARY_HSL = '217 91% 60%';
+const DEFAULT_PRIMARY_HSL = '0 0% 0%';
 
 const hexToHsl = (hex: string) => {
   const n = hex.replace('#', '');
@@ -74,6 +78,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [currentUser, setCurrentUser] = useState<api.User | null>(null);
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [appSettings, setAppSettings] = useState<api.AppSettings>({ registration_enabled: true, workspace_logo_url: null });
 
   useEffect(() => {
     api.getCurrentUser().then((u) => {
@@ -82,6 +87,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     }).catch(() => setLoading(false));
   }, []);
+
+  const refreshSettings = useCallback(async () => {
+    try {
+      const s = await api.getSettings();
+      setAppSettings(s);
+    } catch {
+      setAppSettings({ registration_enabled: true, workspace_logo_url: null });
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshSettings();
+  }, [refreshSettings]);
 
   const signIn = useCallback(async (email: string, password: string, rememberMe = false) => {
     const u = await api.login(email, password, rememberMe);
@@ -117,7 +135,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [profile?.accent_color]);
 
   return (
-    <AuthContext.Provider value={{ user, session: !!user, loading, isAdmin, profile, signOut, signIn, refreshProfile }}>
+    <AuthContext.Provider value={{ user, session: !!user, loading, isAdmin, profile, appSettings, signOut, signIn, refreshProfile, refreshSettings }}>
       {children}
     </AuthContext.Provider>
   );

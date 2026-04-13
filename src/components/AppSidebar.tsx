@@ -32,7 +32,7 @@ export default function AppSidebar({
   onMobileClose,
 }: SidebarProps) {
   const location = useLocation();
-  const { isAdmin, profile } = useAuth();
+  const { isAdmin, appSettings } = useAuth();
   const { data: tags } = useTags();
   const [tagManagerOpen, setTagManagerOpen] = useState(false);
 
@@ -54,8 +54,8 @@ export default function AppSidebar({
         <div className="h-14 flex items-center px-4 gap-2.5 shrink-0 border-b border-border">
           {!collapsed && (
             <>
-              {profile?.workspace_logo_url ? (
-                <img src={profile.workspace_logo_url} alt="Logo" className="w-7 h-7 rounded-lg object-cover" />
+              {appSettings.workspace_logo_url ? (
+                <img src={appSettings.workspace_logo_url} alt="Logo" className="w-7 h-7 rounded-lg object-cover" />
               ) : (
                 <div className="w-7 h-7 rounded-lg bg-foreground flex items-center justify-center">
                   <FileText className="w-4 h-4 text-background" />
