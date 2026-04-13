@@ -145,6 +145,10 @@ function isValidPassword(password) {
   return typeof password === 'string' && password.length >= 4;
 }
 
+function resolveDisplayName(preferredName, preferredEmail, fallbackName, fallbackEmail) {
+  return preferredName || preferredEmail || fallbackName || fallbackEmail || 'Unknown user';
+}
+
 function getWorkspaceLogoUrl() {
   const row = db.prepare("SELECT value FROM settings WHERE key='workspace_logo_url'").get();
   return row ? row.value : null;
@@ -537,16 +541,30 @@ app.get('/api/documents', auth, (req, res) => {
   `);
   docs = docs.map(d => {
     const { share_password_hash, ...rest } = d;
+    const uploadedByName = resolveDisplayName(
+      rest.uploaded_by_name,
+      null,
+      req.user.full_name,
+      req.user.email,
+    );
+    const sharedByName = resolveDisplayName(
+      rest.shared_by_name,
+      null,
+      uploadedByName,
+      req.user.email,
+    );
     return ({
-    ...rest,
-    name: normalizeUploadedFilename(rest.name),
-    starred: !!d.starred,
-    trashed: !!d.trashed,
-    shared: !!d.shared,
-    share_has_password: !!share_password_hash,
-    tag_ids: [],
-    tags: tagStmt.all(d.id),
-  });
+      ...rest,
+      name: normalizeUploadedFilename(rest.name),
+      uploaded_by_name: uploadedByName,
+      shared_by_name: sharedByName,
+      starred: !!d.starred,
+      trashed: !!d.trashed,
+      shared: !!d.shared,
+      share_has_password: !!share_password_hash,
+      tag_ids: [],
+      tags: tagStmt.all(d.id),
+    });
   });
 
   if (tagId) {
@@ -897,7 +915,18 @@ app.get('/api/shared/:token', (req, res) => {
     SELECT t.id, t.name, t.color FROM tags t
     JOIN document_tags dt ON dt.tag_id = t.id WHERE dt.document_id = ?
   `).all(doc.id);
-  res.json({ ...doc, name: normalizeUploadedFilename(doc.name), starred: !!doc.starred, trashed: false, shared: true, tags });
+  const uploadedByName = resolveDisplayName(doc.uploaded_by_name, null, null, null);
+  const sharedByName = resolveDisplayName(doc.shared_by_name, null, uploadedByName, null);
+  res.json({
+    ...doc,
+    name: normalizeUploadedFilename(doc.name),
+    uploaded_by_name: uploadedByName,
+    shared_by_name: sharedByName,
+    starred: !!doc.starred,
+    trashed: false,
+    shared: true,
+    tags,
+  });
 });
 
 app.get('/api/shared/:token/download', (req, res) => {

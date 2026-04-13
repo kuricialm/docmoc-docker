@@ -192,32 +192,34 @@ export default function SettingsPage() {
         </form>
       </Section>
 
-      <Section>
-        <h3 className="text-sm font-semibold">Change Email</h3>
-        <form onSubmit={handleEmailChange} className="space-y-3">
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">New Email</Label>
-            <Input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="Enter new email" required className="h-10 rounded-lg" />
-          </div>
-          <Button type="submit" size="sm" className="rounded-lg" disabled={emailLoading}>
-            {emailLoading ? 'Updating...' : 'Update Email'}
-          </Button>
-        </form>
-      </Section>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <Section>
+          <h3 className="text-sm font-semibold">Change Email</h3>
+          <form onSubmit={handleEmailChange} className="space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">New Email</Label>
+              <Input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="Enter new email" required className="h-10 rounded-lg" />
+            </div>
+            <Button type="submit" size="sm" className="rounded-lg" disabled={emailLoading}>
+              {emailLoading ? 'Updating...' : 'Update Email'}
+            </Button>
+          </form>
+        </Section>
 
-      <Section>
-        <h3 className="text-sm font-semibold">Change Password</h3>
-        <form onSubmit={handlePasswordChange} className="space-y-3">
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">New Password</Label>
-            <Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Enter new password" required minLength={6} className="h-10 rounded-lg" />
-          </div>
-          <p className="text-xs text-muted-foreground">You will be signed out after changing your password.</p>
-          <Button type="submit" size="sm" className="rounded-lg" disabled={passwordLoading}>
-            {passwordLoading ? 'Updating...' : 'Update Password'}
-          </Button>
-        </form>
-      </Section>
+        <Section>
+          <h3 className="text-sm font-semibold">Change Password</h3>
+          <form onSubmit={handlePasswordChange} className="space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">New Password</Label>
+              <Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Enter new password" required minLength={6} className="h-10 rounded-lg" />
+            </div>
+            <p className="text-xs text-muted-foreground">You will be signed out after changing your password.</p>
+            <Button type="submit" size="sm" className="rounded-lg" disabled={passwordLoading}>
+              {passwordLoading ? 'Updating...' : 'Update Password'}
+            </Button>
+          </form>
+        </Section>
+      </div>
 
       {isAdmin && (
         <Section>
