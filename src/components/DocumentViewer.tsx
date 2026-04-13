@@ -178,16 +178,10 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
     );
   };
 
-  const handleCreateShareLink = () => {
-    if (shareMode === 'expires' && !expiresAt) {
-      toast.error('Please choose an expiration date and time');
-      return;
-    }
-    if (shareMode === 'password' && sharePassword.length < 4) {
-      toast.error('Password must be at least 4 characters');
-      return;
-    }
-    handleToggleShare(shareMode);
+  const openShareSettings = () => {
+    setExpiresAt(doc.share_expires_at ? doc.share_expires_at.slice(0, 16) : '');
+    setSharePassword('');
+    setShareDialogOpen(true);
   };
 
   return (
@@ -267,11 +261,16 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
                     <Download className="w-3.5 h-3.5" /> Download
                   </Button>
                   {optimisticShared ? (
-                    <Button variant="outline" size="sm" className="justify-start gap-2 rounded-lg border-border/40" onClick={handleDisableSharing}>
-                      <Share2 className="w-3.5 h-3.5" /> Disable Sharing
-                    </Button>
+                    <>
+                      <Button variant="outline" size="sm" className="justify-start gap-2 rounded-lg border-border/40" onClick={openShareSettings}>
+                        <Share2 className="w-3.5 h-3.5" /> Edit Share Settings
+                      </Button>
+                      <Button variant="outline" size="sm" className="justify-start gap-2 rounded-lg border-border/40" onClick={handleDisableSharing}>
+                        <Share2 className="w-3.5 h-3.5" /> Disable Sharing
+                      </Button>
+                    </>
                   ) : (
-                    <Button variant="outline" size="sm" className="justify-start gap-2 rounded-lg border-border/40" onClick={() => setShareDialogOpen(true)}>
+                    <Button variant="outline" size="sm" className="justify-start gap-2 rounded-lg border-border/40" onClick={openShareSettings}>
                       <Share2 className="w-3.5 h-3.5" /> Share Link
                     </Button>
                   )}
@@ -296,7 +295,7 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
       <Dialog open={shareDialogOpen} onOpenChange={setShareDialogOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Share this document</DialogTitle>
+            <DialogTitle>{optimisticShared ? 'Edit share settings' : 'Share this document'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
@@ -320,7 +319,7 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
               />
             </div>
 
-            <Button className="w-full" onClick={handleGenerateShareLink}>Generate link</Button>
+            <Button className="w-full" onClick={handleGenerateShareLink}>{optimisticShared ? 'Update share settings' : 'Generate link'}</Button>
           </div>
         </DialogContent>
       </Dialog>

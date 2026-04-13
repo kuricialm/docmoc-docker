@@ -136,6 +136,23 @@ function cleanupTrash() {
 cleanupTrash();
 setInterval(cleanupTrash, 3600000);
 
+function cleanupExpiredShares(userId) {
+  const isoNow = now();
+  if (userId) {
+    db.prepare(`
+      UPDATE documents
+      SET shared = 0, share_token = NULL, share_expires_at = NULL, share_password_hash = NULL, updated_at = ?
+      WHERE user_id = ? AND shared = 1 AND share_expires_at IS NOT NULL AND share_expires_at <= ?
+    `).run(isoNow, userId, isoNow);
+    return;
+  }
+  db.prepare(`
+    UPDATE documents
+    SET shared = 0, share_token = NULL, share_expires_at = NULL, share_password_hash = NULL, updated_at = ?
+    WHERE shared = 1 AND share_expires_at IS NOT NULL AND share_expires_at <= ?
+  `).run(isoNow, isoNow);
+}
+
 // ── Express app ──
 const app = express();
 app.use(express.json());
@@ -372,6 +389,7 @@ app.post('/api/auth/register', (req, res) => {
 
 // ── Documents ──
 app.get('/api/documents', auth, (req, res) => {
+  cleanupExpiredShares(req.user.id);
   const { trashed, starred, shared, tagId, recent } = req.query;
   let sql = 'SELECT * FROM documents WHERE user_id = ?';
   const params = [req.user.id];
@@ -396,14 +414,18 @@ app.get('/api/documents', auth, (req, res) => {
     JOIN document_tags dt ON dt.tag_id = t.id
     WHERE dt.document_id = ?
   `);
-  docs = docs.map(d => ({
-    ...d,
+  docs = docs.map(d => {
+    const { share_password_hash, ...rest } = d;
+    return ({
+    ...rest,
     starred: !!d.starred,
     trashed: !!d.trashed,
     shared: !!d.shared,
+    share_has_password: !!share_password_hash,
     tag_ids: [],
     tags: tagStmt.all(d.id),
-  }));
+  });
+  });
 
   if (tagId) {
     docs = docs.filter(d => d.tags.some(t => t.id === tagId));
@@ -475,6 +497,8 @@ app.delete('/api/documents/:id', auth, (req, res) => {
 
 app.patch('/api/documents/:id/share', auth, (req, res) => {
   const { shared, config } = req.body;
+  const existing = db.prepare('SELECT id, share_token FROM documents WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+  if (!existing) return res.status(404).json({ error: 'Not found' });
   if (!shared) {
     db.prepare('UPDATE documents SET shared = 0, share_token = NULL, share_expires_at = NULL, share_password_hash = NULL, updated_at = ? WHERE id = ? AND user_id = ?')
       .run(now(), req.params.id, req.user.id);
@@ -499,7 +523,7 @@ app.patch('/api/documents/:id/share', auth, (req, res) => {
     sharePasswordHash = bcrypt.hashSync(config.password, 10);
   }
 
-  const shareToken = shared ? uid() : null;
+  const shareToken = existing.share_token || uid();
   db.prepare('UPDATE documents SET shared = 1, share_token = ?, share_expires_at = ?, share_password_hash = ?, updated_at = ? WHERE id = ? AND user_id = ?')
     .run(shareToken, shareExpiresAt, sharePasswordHash, now(), req.params.id, req.user.id);
   res.json({ ok: true, share_token: shareToken });

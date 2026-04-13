@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react';
 import { useDocuments, useDocumentMutations, Document } from '@/hooks/useDocuments';
 import { Button } from '@/components/ui/button';
-import { Share2, Copy } from 'lucide-react';
+import { Share2, Copy, Lock, TimerReset, Pencil } from 'lucide-react';
 import { formatFileSize } from '@/lib/fileTypes';
 import FileTypeIcon from '@/components/FileTypeIcon';
 import { toast } from 'sonner';
 import DocumentViewer from '@/components/DocumentViewer';
 import { copyTextToClipboard, getSharedDocumentUrl } from '@/lib/share';
+import { Badge } from '@/components/ui/badge';
 
 type Props = { search: string };
 
@@ -27,6 +28,17 @@ export default function SharedPage({ search }: Props) {
     }
   };
 
+  const getTimeRemaining = (expiresAt: string) => {
+    const ms = new Date(expiresAt).getTime() - Date.now();
+    if (ms <= 0) return 'Expired';
+    const mins = Math.floor(ms / 60000);
+    if (mins < 60) return `${mins}m left`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 48) return `${hours}h left`;
+    const days = Math.floor(hours / 24);
+    return `${days}d left`;
+  };
+
   return (
     <div className="space-y-6 animate-page-in">
       <h2 className="text-xl font-semibold tracking-tight">Shared by Me</h2>
@@ -44,6 +56,11 @@ export default function SharedPage({ search }: Props) {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate cursor-pointer hover:text-primary transition-colors duration-150" onClick={() => setViewDocId(doc.id)}>{doc.name}</p>
                   <p className="text-xs text-muted-foreground/70 mt-0.5">{formatFileSize(doc.file_size)}</p>
+                  <div className="flex flex-wrap gap-1.5 mt-1.5">
+                    {!doc.share_expires_at && !doc.share_has_password && <Badge variant="secondary" className="text-[10px]">Public</Badge>}
+                    {doc.share_expires_at && <Badge variant="secondary" className="text-[10px] gap-1"><TimerReset className="w-3 h-3" /> {getTimeRemaining(doc.share_expires_at)}</Badge>}
+                    {doc.share_has_password && <Badge variant="secondary" className="text-[10px] gap-1"><Lock className="w-3 h-3" /> Password</Badge>}
+                  </div>
                 </div>
                 <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                   {doc.share_token && (
@@ -51,6 +68,9 @@ export default function SharedPage({ search }: Props) {
                       <Copy className="w-3 h-3" /> <span className="hidden sm:inline">Copy Link</span>
                     </Button>
                   )}
+                  <Button variant="ghost" size="sm" onClick={() => setViewDocId(doc.id)} className="gap-1.5 text-xs rounded-lg h-8 px-2 sm:px-3">
+                    <Pencil className="w-3 h-3" /> <span className="hidden sm:inline">Edit</span>
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"

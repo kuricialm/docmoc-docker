@@ -17,6 +17,7 @@ export type Document = {
   shared: boolean;
   share_token: string | null;
   share_expires_at?: string | null;
+  share_has_password?: boolean;
   created_at: string;
   updated_at: string;
   tags?: { id: string; name: string; color: string }[];
