@@ -16,11 +16,14 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import type { DateFilter } from '@/hooks/useDocumentBrowse';
+import type { SortBy } from '@/hooks/useDocumentBrowse';
 import type { Tag } from '@/hooks/useTags';
 
 type Props = {
   dateFilter: DateFilter;
   onDateFilterChange: (value: DateFilter) => void;
+  sortBy: SortBy;
+  onSortByChange: (value: SortBy) => void;
   fileTypeFilter: string;
   onFileTypeFilterChange: (value: string) => void;
   tagFilter: string;
@@ -44,9 +47,18 @@ const dateOptions: { value: DateFilter; label: string }[] = [
   { value: '365', label: 'Last year' },
 ];
 
+const sortOptions: { value: SortBy; label: string }[] = [
+  { value: 'created_desc', label: 'Upload date: newest to oldest' },
+  { value: 'created_asc', label: 'Upload date: oldest to newest' },
+  { value: 'updated_desc', label: 'Modified date: newest to oldest' },
+  { value: 'updated_asc', label: 'Modified date: oldest to newest' },
+];
+
 export default function DocumentBrowseToolbar({
   dateFilter,
   onDateFilterChange,
+  sortBy,
+  onSortByChange,
   fileTypeFilter,
   onFileTypeFilterChange,
   tagFilter,
@@ -70,13 +82,24 @@ export default function DocumentBrowseToolbar({
     <div className="space-y-3">
       <div className="rounded-xl border border-border/60 bg-card p-3 sm:p-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 lg:max-w-3xl w-full">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4 lg:max-w-5xl w-full">
             <Select value={dateFilter} onValueChange={(value) => onDateFilterChange(value as DateFilter)}>
               <SelectTrigger className="h-9">
                 <SelectValue placeholder="Date" />
               </SelectTrigger>
               <SelectContent>
                 {dateOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={sortBy} onValueChange={(value) => onSortByChange(value as SortBy)}>
+              <SelectTrigger className="h-9">
+                <SelectValue placeholder="Sort by" />
+              </SelectTrigger>
+              <SelectContent>
+                {sortOptions.map((option) => (
                   <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
                 ))}
               </SelectContent>

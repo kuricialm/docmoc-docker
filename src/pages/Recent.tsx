@@ -20,6 +20,8 @@ export default function RecentPage({ viewMode, search }: Props) {
   const {
     dateFilter,
     setDateFilter,
+    sortBy,
+    setSortBy,
     fileTypeFilter,
     setFileTypeFilter,
     tagFilter,
@@ -42,6 +44,8 @@ export default function RecentPage({ viewMode, search }: Props) {
       <DocumentBrowseToolbar
         dateFilter={dateFilter}
         onDateFilterChange={setDateFilter}
+        sortBy={sortBy}
+        onSortByChange={setSortBy}
         fileTypeFilter={fileTypeFilter}
         onFileTypeFilterChange={setFileTypeFilter}
         tagFilter={tagFilter}

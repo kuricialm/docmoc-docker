@@ -26,6 +26,8 @@ export default function AllDocuments({ viewMode, search }: Props) {
   const {
     dateFilter,
     setDateFilter,
+    sortBy,
+    setSortBy,
     fileTypeFilter,
     setFileTypeFilter,
     tagFilter,
@@ -51,6 +53,8 @@ export default function AllDocuments({ viewMode, search }: Props) {
       <DocumentBrowseToolbar
         dateFilter={dateFilter}
         onDateFilterChange={setDateFilter}
+        sortBy={sortBy}
+        onSortByChange={setSortBy}
         fileTypeFilter={fileTypeFilter}
         onFileTypeFilterChange={setFileTypeFilter}
         tagFilter={tagFilter}

@@ -4,6 +4,7 @@ import type { Document } from '@/hooks/useDocuments';
 export const DOCUMENTS_PER_PAGE = 20;
 
 export type DateFilter = 'any' | '7' | '30' | '90' | '365';
+export type SortBy = 'created_desc' | 'created_asc' | 'updated_desc' | 'updated_asc';
 
 type Options = {
   lockedTagId?: string;
@@ -11,6 +12,7 @@ type Options = {
 
 export function useDocumentBrowse(documents: Document[], search: string, options?: Options) {
   const [dateFilter, setDateFilter] = useState<DateFilter>('any');
+  const [sortBy, setSortBy] = useState<SortBy>('created_desc');
   const [fileTypeFilter, setFileTypeFilter] = useState('all');
   const [tagFilter, setTagFilter] = useState(options?.lockedTagId ?? 'all');
   const [page, setPage] = useState(1);
@@ -62,13 +64,31 @@ export function useDocumentBrowse(documents: Document[], search: string, options
     }
   }, [page, totalPages]);
 
+  const sortedDocuments = useMemo(() => {
+    const docs = [...filteredDocuments];
+    const byDate = (field: 'created_at' | 'updated_at', direction: 'asc' | 'desc') => {
+      docs.sort((a, b) => {
+        const aTs = new Date(a[field]).getTime();
+        const bTs = new Date(b[field]).getTime();
+        return direction === 'desc' ? bTs - aTs : aTs - bTs;
+      });
+    };
+
+    if (sortBy === 'created_desc') byDate('created_at', 'desc');
+    if (sortBy === 'created_asc') byDate('created_at', 'asc');
+    if (sortBy === 'updated_desc') byDate('updated_at', 'desc');
+    if (sortBy === 'updated_asc') byDate('updated_at', 'asc');
+    return docs;
+  }, [filteredDocuments, sortBy]);
+
   const paginatedDocuments = useMemo(() => {
     const start = (page - 1) * DOCUMENTS_PER_PAGE;
-    return filteredDocuments.slice(start, start + DOCUMENTS_PER_PAGE);
-  }, [filteredDocuments, page]);
+    return sortedDocuments.slice(start, start + DOCUMENTS_PER_PAGE);
+  }, [sortedDocuments, page]);
 
   const resetFilters = () => {
     setDateFilter('any');
+    setSortBy('created_desc');
     setFileTypeFilter('all');
     setTagFilter(options?.lockedTagId ?? 'all');
   };
@@ -76,6 +96,8 @@ export function useDocumentBrowse(documents: Document[], search: string, options
   return {
     dateFilter,
     setDateFilter,
+    sortBy,
+    setSortBy,
     fileTypeFilter,
     setFileTypeFilter,
     tagFilter,
