@@ -1,129 +1,122 @@
 
 
-# Plan: Add Express Backend to Docmoc (Revised)
+# Plan: Fix Build Errors + Modernize UI/UX
 
-## Architecture
+## Part 1: Fix Build Errors
 
-```text
-┌──────────────────────────────┐     ┌──────────────────────────────┐
-│  React SPA (Vite build)      │     │  Express Backend (server.cjs)│
-│                              │     │                              │
-│  src/lib/api.ts ─── fetch ──────►  │  /api/auth/*                 │
-│  (HTTP client)               │     │  /api/documents/*            │
-│                              │     │  /api/tags/*                 │
-│                              │     │  /api/notes/*                │
-│                              │     │  /api/users/*                │
-│                              │     │  /api/settings/*             │
-│                              │     │  /api/shared/*               │
-│                              │     │                              │
-│                              │     │  SQLite: ./data/docmoc.db    │
-│                              │     │  Files:  ./data/uploads/     │
-└──────────────────────────────┘     └──────────────────────────────┘
-```
+### 1. Remove leftover Supabase files
+Delete `src/integrations/supabase/client.ts` and `src/integrations/supabase/types.ts` — no code imports them, but TypeScript still compiles them and fails on the missing `@supabase/supabase-js` module.
 
-## Key Design Decisions
+### 2. Fix `toggleShare` return type in DocumentViewer
+The `toggleShare` mutation in `useDocuments.ts` returns `void` because it doesn't pass through the return value from `api.toggleShare()`. Fix by returning the result from the mutation function, then access `data.share_token` in the `onSuccess` callback of `DocumentViewer.tsx` (line 127).
 
-### File storage paths
-Files stored as `DATA_DIR/uploads/{userId}/{docId}.{ext}`. Original filename kept only in SQLite `documents.name`. No user-controlled strings in filesystem paths.
+## Part 2: UI/UX Modernization
 
-### Seed admin
-Configurable via environment variables:
-- `ADMIN_EMAIL` (default: `admin@docmoc.local`)
-- `ADMIN_PASSWORD` (default: `admin`)
-- Only created on first run when no users exist in the database.
+All changes are CSS/className-level. No logic or architecture changes.
 
-### Sessions
-HTTP-only cookies. The server sets a `session` cookie with `httpOnly: true, sameSite: 'lax', path: '/'`. Frontend `api.ts` uses `credentials: 'include'` on all fetch calls -- no token handling in JS.
+### 3. Global styling upgrades (`src/index.css`)
+- Softer border colors (reduce opacity)
+- Smoother global transitions on interactive elements
+- Improved scrollbar styling (thin, subtle)
+- Better focus ring styles
+- Page-level fade-in animation for route content
+- Dropdown/popover entrance animations (scale + fade)
 
-### Passwords
-Hashed with `bcrypt` (via `bcryptjs` -- pure JS, no native deps). Passwords are never stored or compared in plain text. Login compares with `bcrypt.compareSync()`.
+### 4. Dashboard stats cards (`DashboardStats.tsx`)
+- Glassmorphic/frosted card surfaces with subtle backdrop blur
+- Larger icon containers with gradient backgrounds
+- Better spacing, `rounded-xl`, softer shadows
+- Counter numbers with tabular-nums for alignment
+- Hover lift effect with shadow transition
 
-### Shared links
-`GET /api/shared/:token` and `/api/shared/:token/download` are the only unauthenticated endpoints. They query by `share_token` where `shared=1 AND trashed=0`, returning only that single document's metadata/file. No directory listing, no path traversal, no access to other documents.
+### 5. Document cards (`DocumentCard.tsx`)
+- Softer preview area with subtle gradient overlay
+- Smoother hover shadow transition (shadow-md to shadow-xl)
+- Better tag pill styling with more padding
+- Improved date text with relative formatting
+- Border opacity reduced for softer feel
+- Subtle scale on hover (1.01)
 
-### Trash cleanup
-On every app start and once per hour via `setInterval`, run:
-```sql
-DELETE FROM documents WHERE trashed = 1
-  AND trashed_at < datetime('now', '-30 days')
-```
-Also delete the corresponding files from disk. Retention period configurable via `TRASH_RETENTION_DAYS` env var (default: 30).
+### 6. Document list view (`DocumentListView.tsx`)
+- Remove hard borders, use subtle row dividers
+- Add hover background transition
+- On mobile: convert table rows to stacked card layout instead of hiding columns
+- Responsive gap and padding adjustments
 
-## What Changes
+### 7. TopBar (`TopBar.tsx`)
+- Glassmorphic header with backdrop-blur
+- Search input with larger padding, subtle inner shadow
+- Smoother avatar hover ring effect
+- Upload button with subtle gradient
 
-### 1. Create `server.cjs`
-Express server with routes:
+### 8. Sidebar (`AppSidebar.tsx`)
+- Smoother hover transitions (150ms ease)
+- Active item with left accent border indicator
+- Better tag section spacing
+- Subtle backdrop blur on mobile overlay
 
-- **Auth**: `POST /api/auth/login` (sets httpOnly cookie), `POST /api/auth/logout` (clears cookie), `GET /api/auth/me`
-- **Documents**: CRUD, upload (multipart via multer), download, star, trash, restore, share, permanent delete
-- **Tags**: CRUD + document-tag associations
-- **Notes**: GET/PUT per document
-- **Users** (admin only): list, create, update role
-- **Settings**: GET/PATCH (registration toggle)
-- **Shared**: GET metadata + GET download (no auth required)
-- **Logo**: POST upload
+### 9. Login page (`Login.tsx`)
+- Centered card with soft shadow and border
+- Subtle background pattern/gradient
+- Input focus transitions
+- Button loading state with opacity pulse
+- Better vertical rhythm
 
-Auth middleware reads session cookie, looks up in `sessions` table, attaches `req.user`. Shared endpoints skip auth.
+### 10. Settings page (`Settings.tsx`)
+- Section cards with hover border color transition
+- Better form spacing
+- Accent color buttons with ring indicator on hover
+- Smoother switch animation
 
-Static serving: in production, serves Vite `dist/` folder.
+### 11. Admin page (`Admin.tsx`)
+- User rows with hover state
+- Better avatar gradient
+- Badge styling improvements
+- Modal improvements
 
-### 2. Rewrite `src/lib/api.ts`
-Replace localStorage/IndexedDB calls with `fetch('/api/...', { credentials: 'include' })`. Same exported function signatures so hooks and pages need zero changes.
+### 12. Trash, Shared, Recent pages
+- Consistent empty state illustrations
+- Better row hover states
+- Mobile-friendly action button layout (stack vertically on small screens)
 
-### 3. Delete `src/lib/store.ts`
-No longer needed.
+### 13. DocumentViewer modal (`DocumentViewer.tsx`)
+- Smoother open animation
+- Better panel divider styling
+- Improved note area with focused state
+- Tag pills with hover/remove animation
+- Fix the share_token type error (from Part 1)
 
-### 4. Update `vite.config.ts`
-Add proxy: `/api` -> `http://localhost:3001` for development.
+### 14. Mobile responsiveness improvements
+- **Sidebar**: already handles mobile overlay; add swipe gesture hint
+- **TopBar**: compact search on mobile, icon-only buttons
+- **Document grid**: single column on small screens with tighter cards
+- **List view**: stacked card layout on mobile instead of compressed table
+- **Trash/Shared pages**: stack action buttons below content on mobile
+- **Settings**: full-width sections, better touch targets (min 44px)
+- **Admin**: user cards instead of wide rows on mobile
+- **Modals**: full-screen on mobile with safe area padding
 
-### 5. Update `package.json`
-Add dependencies: `express`, `multer`, `better-sqlite3`, `cookie-parser`, `bcryptjs`.
-Add scripts: `"start": "node server.cjs"`, `"dev:server": "node server.cjs"`.
+## Files to modify
 
-### 6. Update Docker setup
-**Dockerfile** (multi-stage):
-- Stage 1: Build frontend with `npm install` + `npm run build`
-- Stage 2: `node:20-alpine`, copy `dist/`, `server.cjs`, `package.json`, install production deps, expose 3001, `CMD ["node", "server.cjs"]`
-
-**docker-compose.yml**: port 3000:3001, volume `./data:/app/data`.
-
-### 7. SQLite schema (auto-created on first run)
-```sql
-CREATE TABLE users (id TEXT PRIMARY KEY, email TEXT UNIQUE, full_name TEXT,
-  role TEXT DEFAULT 'user', password_hash TEXT, accent_color TEXT,
-  avatar_url TEXT, workspace_logo_url TEXT, created_at TEXT);
-
-CREATE TABLE sessions (token TEXT PRIMARY KEY, user_id TEXT, created_at TEXT);
-
-CREATE TABLE documents (id TEXT PRIMARY KEY, user_id TEXT, name TEXT,
-  file_type TEXT, file_size INTEGER, storage_path TEXT, starred INTEGER DEFAULT 0,
-  trashed INTEGER DEFAULT 0, trashed_at TEXT, shared INTEGER DEFAULT 0,
-  share_token TEXT, created_at TEXT, updated_at TEXT);
-
-CREATE TABLE tags (id TEXT PRIMARY KEY, user_id TEXT, name TEXT,
-  color TEXT, created_at TEXT);
-
-CREATE TABLE document_tags (document_id TEXT, tag_id TEXT,
-  PRIMARY KEY(document_id, tag_id));
-
-CREATE TABLE notes (id TEXT PRIMARY KEY, document_id TEXT, user_id TEXT,
-  content TEXT, created_at TEXT, updated_at TEXT);
-
-CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT);
-```
-
-## Files Summary
-
-| Action | File |
-|--------|------|
-| Create | `server.cjs` |
-| Rewrite | `src/lib/api.ts` |
-| Delete | `src/lib/store.ts` |
-| Edit | `package.json` |
-| Edit | `vite.config.ts` |
-| Rewrite | `Dockerfile` |
-| Edit | `docker-compose.yml` |
-| Edit | `.dockerignore` |
-
-No changes to UI components, hooks, contexts, or pages.
+| File | Changes |
+|------|---------|
+| `src/integrations/supabase/client.ts` | **Delete** |
+| `src/integrations/supabase/types.ts` | **Delete** |
+| `src/index.css` | Global animations, transitions, scrollbar, focus styles |
+| `tailwind.config.ts` | New keyframes, animation utilities |
+| `src/hooks/useDocuments.ts` | Return value from toggleShare mutation |
+| `src/components/DashboardStats.tsx` | Premium card styling |
+| `src/components/DocumentCard.tsx` | Softer surfaces, better hover, spacing |
+| `src/components/DocumentListView.tsx` | Mobile card layout, softer rows |
+| `src/components/TopBar.tsx` | Glassmorphic header, better search |
+| `src/components/AppSidebar.tsx` | Active indicator, smoother transitions |
+| `src/components/DocumentViewer.tsx` | Fix type error, better animations |
+| `src/pages/Login.tsx` | Card surface, gradient bg, better spacing |
+| `src/pages/Settings.tsx` | Section hover, better form rhythm |
+| `src/pages/Admin.tsx` | Mobile cards, hover states |
+| `src/pages/Trash.tsx` | Mobile stacked layout, hover states |
+| `src/pages/Shared.tsx` | Mobile stacked layout, hover states |
+| `src/pages/Recent.tsx` | Consistent page header styling |
+| `src/pages/AllDocuments.tsx` | Page header, animate-in for content |
+| `src/components/MainLayout.tsx` | Route transition wrapper |
 
