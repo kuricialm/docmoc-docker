@@ -140,7 +140,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [profile?.accent_color]);
 
   useEffect(() => {
-    const href = appSettings.workspace_favicon_url || '/favicon.ico';
+    const href = appSettings.workspace_favicon_url || '/placeholder.svg';
     let link = document.querySelector("link[rel='icon']") as HTMLLinkElement | null;
     if (!link) {
       link = document.createElement('link');

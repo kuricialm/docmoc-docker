@@ -34,7 +34,7 @@ export default function TrashPage({ search }: Props) {
                 <FileTypeIcon fileType={doc.file_type} size="sm" />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">{doc.name}</p>
-                  <p className="text-xs text-muted-foreground/70 mt-0.5">{formatFileSize(doc.file_size)} -- {daysLeft} days left</p>
+                  <p className="text-xs text-muted-foreground/70 mt-0.5">{formatFileSize(doc.file_size)} — {daysLeft} days left</p>
                 </div>
                 <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                   <Button variant="ghost" size="sm" onClick={() => restoreDocument.mutate(doc.id)} className="gap-1.5 text-xs rounded-lg h-8 px-2 sm:px-3">
