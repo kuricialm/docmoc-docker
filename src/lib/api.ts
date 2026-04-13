@@ -306,7 +306,8 @@ export async function getSharedDocumentBlob(token: string, password?: string): P
 }
 
 export async function getDocumentHistory(documentId: string): Promise<DocumentHistoryRecord[]> {
-  return apiFetch(`/documents/${documentId}/history`);
+  const rows = await apiFetch<DocumentHistoryRecord[]>(`/documents/${documentId}/history`);
+  return [...rows].sort((a, b) => b.created_at.localeCompare(a.created_at));
 }
 
 // ---------- Tags ----------

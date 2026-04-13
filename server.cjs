@@ -15,6 +15,8 @@ const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@docmoc.local';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin';
 const TRASH_RETENTION_DAYS = parseInt(process.env.TRASH_RETENTION_DAYS || '30', 10);
 const COOKIE_SECRET = process.env.COOKIE_SECRET || 'docmoc-secret-change-me';
+const COOKIE_DOMAIN = process.env.COOKIE_DOMAIN || undefined;
+const COOKIE_SECURE_MODE = process.env.COOKIE_SECURE_MODE || 'auto'; // auto | always | never
 
 fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
@@ -224,14 +226,29 @@ function cleanupExpiredShares(userId) {
 }
 
 // ── Express app ──
+function resolveTrustProxySetting() {
+  const raw = process.env.TRUST_PROXY;
+  if (raw === undefined) return process.env.NODE_ENV === 'production' ? 1 : false;
+  const normalized = String(raw).trim().toLowerCase();
+  if (normalized === 'true') return 1;
+  if (normalized === 'false') return false;
+  const asNumber = Number.parseInt(normalized, 10);
+  if (!Number.isNaN(asNumber)) return asNumber;
+  return raw;
+}
+
 const app = express();
-app.set('trust proxy', 1);
+app.set('trust proxy', resolveTrustProxySetting());
 app.use(express.json());
 app.use(cookieParser(COOKIE_SECRET));
 
 // Cookie helper — adapts to secure (HTTPS / proxy) contexts for iframe/preview compat
 function sessionCookieOpts(req, maxAge) {
-  const isSecure = req.secure || req.headers['x-forwarded-proto'] === 'https';
+  const isSecure = COOKIE_SECURE_MODE === 'always'
+    ? true
+    : COOKIE_SECURE_MODE === 'never'
+      ? false
+      : req.secure;
   const opts = { httpOnly: true, path: '/' };
   if (isSecure) {
     opts.secure = true;
@@ -239,6 +256,7 @@ function sessionCookieOpts(req, maxAge) {
   } else {
     opts.sameSite = 'lax';
   }
+  if (COOKIE_DOMAIN) opts.domain = COOKIE_DOMAIN;
   if (maxAge) opts.maxAge = maxAge;
   return opts;
 }
@@ -783,7 +801,7 @@ app.get('/api/documents/:id/history', auth, (req, res) => {
       LIMIT 200
     `).all(req.params.id);
 
-    const mapped = rows.map((r) => {
+    let mapped = rows.map((r) => {
       let parsedDetails = null;
       if (r.details && r.details.startsWith('{')) {
         try { parsedDetails = JSON.parse(r.details); } catch (_) { parsedDetails = null; }
@@ -799,9 +817,12 @@ app.get('/api/documents/:id/history', auth, (req, res) => {
       };
     });
 
-    // Backfill for legacy docs without persistent upload events, without writing during read path.
-    if (mapped.length === 0) {
-      mapped.push({
+    const hasUploadAction = mapped.some((event) => event.action === 'uploaded');
+    // Backfill for legacy docs missing upload event, without writing during read path.
+    if (!hasUploadAction) {
+      mapped = [
+        ...mapped,
+        {
         id: `synthetic-upload-${owned.id}`,
         document_id: owned.id,
         user_id: req.user.id,
@@ -809,8 +830,10 @@ app.get('/api/documents/:id/history', auth, (req, res) => {
         details: { name: owned.name },
         created_at: owned.created_at || now(),
         actor_name: req.user.full_name || req.user.email || 'Unknown user',
-      });
+      }];
     }
+
+    mapped.sort((a, b) => b.created_at.localeCompare(a.created_at));
 
     const elapsed = Date.now() - startedAt;
     if (elapsed > 200) {
