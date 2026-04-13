@@ -1,6 +1,6 @@
 import { Document, useDocumentMutations } from '@/hooks/useDocuments';
 import { getFileTypeInfo, formatFileSize } from '@/lib/fileTypes';
-import { Star, Download, Share2, Trash2, MoreVertical, Eye, Edit2 } from 'lucide-react';
+import { Star, Download, Trash2, MoreVertical, Eye, Edit2, Check } from 'lucide-react';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
@@ -13,18 +13,20 @@ type Props = {
   documents: Document[];
   onView: (doc: Document) => void;
   onRename: (doc: Document) => void;
+  selectedIds?: Set<string>;
+  onToggleSelect?: (doc: Document) => void;
 };
 
-export default function DocumentListView({ documents, onView, onRename }: Props) {
-  const { toggleStar, trashDocument, toggleShare, downloadDocument } = useDocumentMutations();
+export default function DocumentListView({ documents, onView, onRename, selectedIds, onToggleSelect }: Props) {
+  const { toggleStar, trashDocument, downloadDocument } = useDocumentMutations();
 
   return (
     <>
-      {/* Desktop table */}
       <div className="hidden md:block bg-card border border-border/50 rounded-xl overflow-hidden">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border/50 bg-secondary/20">
+              <th className="w-10"></th>
               <th className="text-left py-3 px-4 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Name</th>
               <th className="text-left py-3 px-4 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Type</th>
               <th className="text-left py-3 px-4 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Size</th>
@@ -36,12 +38,24 @@ export default function DocumentListView({ documents, onView, onRename }: Props)
           <tbody>
             {documents.map((doc) => {
               const typeInfo = getFileTypeInfo(doc.file_type);
+              const selected = selectedIds?.has(doc.id) || false;
               return (
                 <tr
                   key={doc.id}
                   className="border-b border-border/30 last:border-b-0 cursor-pointer group hover:bg-secondary/30 transition-colors duration-150"
                   onClick={() => onView(doc)}
                 >
+                  <td className="py-3 px-2">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onToggleSelect?.(doc); }}
+                      className={cn(
+                        'w-5 h-5 rounded border flex items-center justify-center',
+                        selected ? 'bg-primary border-primary text-primary-foreground' : 'text-transparent border-border hover:text-muted-foreground',
+                      )}
+                    >
+                      <Check className="w-3 h-3" />
+                    </button>
+                  </td>
                   <td className="py-3 px-4">
                     <div className="flex items-center gap-3">
                       <FileTypeIcon fileType={doc.file_type} size="sm" />
@@ -89,7 +103,6 @@ export default function DocumentListView({ documents, onView, onRename }: Props)
                         <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onView(doc); }} className="gap-2"><Eye className="w-3.5 h-3.5" /> View</DropdownMenuItem>
                         <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onRename(doc); }} className="gap-2"><Edit2 className="w-3.5 h-3.5" /> Rename</DropdownMenuItem>
                         <DropdownMenuItem onClick={(e) => { e.stopPropagation(); downloadDocument(doc.id, doc.name); }} className="gap-2"><Download className="w-3.5 h-3.5" /> Download</DropdownMenuItem>
-                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); toggleShare.mutate({ id: doc.id, shared: !doc.shared }); }} className="gap-2"><Share2 className="w-3.5 h-3.5" /> {doc.shared ? 'Unshare' : 'Share'}</DropdownMenuItem>
                         <DropdownMenuItem onClick={(e) => { e.stopPropagation(); trashDocument.mutate(doc.id); }} className="gap-2 text-destructive"><Trash2 className="w-3.5 h-3.5" /> Move to Trash</DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -101,16 +114,25 @@ export default function DocumentListView({ documents, onView, onRename }: Props)
         </table>
       </div>
 
-      {/* Mobile stacked cards */}
       <div className="md:hidden space-y-2">
         {documents.map((doc) => {
           const typeInfo = getFileTypeInfo(doc.file_type);
+          const selected = selectedIds?.has(doc.id) || false;
           return (
             <div
               key={doc.id}
               className="bg-card border border-border/50 rounded-xl p-3.5 flex items-center gap-3 active:scale-[0.98] transition-all duration-150 cursor-pointer"
               onClick={() => onView(doc)}
             >
+              <button
+                onClick={(e) => { e.stopPropagation(); onToggleSelect?.(doc); }}
+                className={cn(
+                  'w-5 h-5 rounded border flex items-center justify-center shrink-0',
+                  selected ? 'bg-primary border-primary text-primary-foreground' : 'text-transparent border-border hover:text-muted-foreground',
+                )}
+              >
+                <Check className="w-3 h-3" />
+              </button>
               <FileTypeIcon fileType={doc.file_type} size="sm" />
               <div className="flex-1 min-w-0">
                 <p className={cn('text-sm font-medium truncate', hasArabicCharacters(doc.name) && 'font-arabic-text')}>
@@ -143,7 +165,6 @@ export default function DocumentListView({ documents, onView, onRename }: Props)
                   <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onView(doc); }} className="gap-2"><Eye className="w-3.5 h-3.5" /> View</DropdownMenuItem>
                   <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onRename(doc); }} className="gap-2"><Edit2 className="w-3.5 h-3.5" /> Rename</DropdownMenuItem>
                   <DropdownMenuItem onClick={(e) => { e.stopPropagation(); downloadDocument(doc.id, doc.name); }} className="gap-2"><Download className="w-3.5 h-3.5" /> Download</DropdownMenuItem>
-                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); toggleShare.mutate({ id: doc.id, shared: !doc.shared }); }} className="gap-2"><Share2 className="w-3.5 h-3.5" /> {doc.shared ? 'Unshare' : 'Share'}</DropdownMenuItem>
                   <DropdownMenuItem onClick={(e) => { e.stopPropagation(); trashDocument.mutate(doc.id); }} className="gap-2 text-destructive"><Trash2 className="w-3.5 h-3.5" /> Move to Trash</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
