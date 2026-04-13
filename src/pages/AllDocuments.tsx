@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useMemo } from 'react';
 import { useDocuments, useDocumentMutations, Document } from '@/hooks/useDocuments';
 import DashboardStats from '@/components/DashboardStats';
 import DocumentCard from '@/components/DocumentCard';
@@ -16,12 +16,16 @@ export default function AllDocuments({ viewMode, search, uploadTrigger }: Props)
   const { data: allDocs = [] } = useDocuments();
   const { data: trashedDocs = [] } = useDocuments({ trashed: true });
   const { uploadDocument } = useDocumentMutations();
-  const [viewDoc, setViewDoc] = useState<Document | null>(null);
+  const [viewDocId, setViewDocId] = useState<string | null>(null);
   const [renameDoc, setRenameDoc] = useState<Document | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const filtered = allDocs.filter((d) =>
     d.name.toLowerCase().includes(search.toLowerCase())
+  );
+  const viewDoc = useMemo(
+    () => allDocs.find((doc) => doc.id === viewDocId) ?? null,
+    [allDocs, viewDocId]
   );
 
   const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -43,13 +47,13 @@ export default function AllDocuments({ viewMode, search, uploadTrigger }: Props)
       ) : viewMode === 'grid' ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {filtered.map((doc) => (
-            <DocumentCard key={doc.id} document={doc} onView={setViewDoc} onRename={setRenameDoc} />
+            <DocumentCard key={doc.id} document={doc} onView={(selected) => setViewDocId(selected.id)} onRename={setRenameDoc} />
           ))}
         </div>
       ) : (
-        <DocumentListView documents={filtered} onView={setViewDoc} onRename={setRenameDoc} />
+        <DocumentListView documents={filtered} onView={(selected) => setViewDocId(selected.id)} onRename={setRenameDoc} />
       )}
-      <DocumentViewer document={viewDoc} open={!!viewDoc} onClose={() => setViewDoc(null)} />
+      <DocumentViewer document={viewDoc} open={!!viewDocId} onClose={() => setViewDocId(null)} />
       <RenameDialog document={renameDoc} open={!!renameDoc} onClose={() => setRenameDoc(null)} />
     </div>
   );

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useDocuments, useDocumentMutations, Document } from '@/hooks/useDocuments';
 import { Button } from '@/components/ui/button';
 import { Share2, Copy, ExternalLink } from 'lucide-react';
@@ -12,9 +12,10 @@ type Props = { search: string };
 export default function SharedPage({ search }: Props) {
   const { data: docs = [] } = useDocuments({ shared: true });
   const { toggleShare } = useDocumentMutations();
-  const [viewDoc, setViewDoc] = useState<Document | null>(null);
+  const [viewDocId, setViewDocId] = useState<string | null>(null);
 
   const filtered = docs.filter((d) => d.name.toLowerCase().includes(search.toLowerCase()));
+  const viewDoc = useMemo(() => docs.find((doc) => doc.id === viewDocId) ?? null, [docs, viewDocId]);
 
   const copyLink = (token: string) => {
     navigator.clipboard.writeText(`${window.location.origin}/shared/${token}`);
@@ -34,7 +35,7 @@ export default function SharedPage({ search }: Props) {
               <div key={doc.id} className="flex items-center gap-4 p-4 hover:bg-secondary/20 transition-colors">
                 <FileTypeIcon fileType={doc.file_type} size="sm" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate cursor-pointer hover:text-primary" onClick={() => setViewDoc(doc)}>{doc.name}</p>
+                  <p className="text-sm font-medium truncate cursor-pointer hover:text-primary" onClick={() => setViewDocId(doc.id)}>{doc.name}</p>
                   <p className="text-xs text-muted-foreground">{formatFileSize(doc.file_size)}</p>
                 </div>
                 {doc.share_token && (
@@ -55,7 +56,7 @@ export default function SharedPage({ search }: Props) {
           })}
         </div>
       )}
-      <DocumentViewer document={viewDoc} open={!!viewDoc} onClose={() => setViewDoc(null)} />
+      <DocumentViewer document={viewDoc} open={!!viewDocId} onClose={() => setViewDocId(null)} />
     </div>
   );
 }

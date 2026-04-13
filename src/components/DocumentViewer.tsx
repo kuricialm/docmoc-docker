@@ -25,6 +25,8 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
   const [noteText, setNoteText] = useState('');
   const [optimisticStarred, setOptimisticStarred] = useState(false);
   const [optimisticTags, setOptimisticTags] = useState<Document['tags']>([]);
+  const [optimisticShared, setOptimisticShared] = useState(false);
+  const [optimisticShareToken, setOptimisticShareToken] = useState<string | null>(null);
   const { data: note } = useDocumentNote(doc?.id);
   const { upsertNote } = useNoteMutations();
   const { downloadDocument, toggleShare, toggleStar } = useDocumentMutations();
@@ -59,11 +61,15 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
     if (!doc) return;
     setOptimisticStarred(doc.starred);
     setOptimisticTags(doc.tags || []);
+    setOptimisticShared(doc.shared);
+    setOptimisticShareToken(doc.share_token ?? null);
   }, [doc]);
 
   if (!doc) return null;
   const typeInfo = getFileTypeInfo(doc.file_type);
-  const shareUrl = doc.shared && doc.share_token ? `${window.location.origin}/shared/${doc.share_token}` : null;
+  const shareUrl = optimisticShared && optimisticShareToken
+    ? `${window.location.origin}/shared/${optimisticShareToken}`
+    : null;
   const docTagIds = optimisticTags?.map((t) => t.id) || [];
   const availableTags = allTags?.filter((t) => !docTagIds.includes(t.id)) || [];
 
@@ -108,10 +114,30 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
     );
   };
 
+  const handleToggleShare = () => {
+    const nextShared = !optimisticShared;
+    setOptimisticShared(nextShared);
+    if (!nextShared) setOptimisticShareToken(null);
+
+    toggleShare.mutate(
+      { id: doc.id, shared: nextShared },
+      {
+        onSuccess: (data) => {
+          setOptimisticShared(nextShared);
+          setOptimisticShareToken(data?.share_token ?? null);
+        },
+        onError: () => {
+          setOptimisticShared(!nextShared);
+          setOptimisticShareToken(doc.share_token ?? null);
+        },
+      }
+    );
+  };
+
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-5xl h-[80vh] flex flex-col p-0 gap-0 rounded-xl">
-        <DialogHeader className="px-6 py-4 border-b shrink-0">
+      <DialogContent className="w-[96vw] max-w-5xl h-[92vh] sm:h-[80vh] flex flex-col p-0 gap-0 rounded-xl">
+        <DialogHeader className="px-4 sm:px-6 py-4 border-b shrink-0">
           <div className="flex items-center gap-3">
             <button onClick={handleToggleStar} className="p-1.5 rounded-lg hover:bg-secondary transition-colors" aria-label={optimisticStarred ? 'Unstar document' : 'Star document'}>
               <Star className={`w-4 h-4 ${optimisticStarred ? 'text-amber-400 fill-amber-400' : 'text-muted-foreground/40'}`} />
@@ -120,8 +146,8 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
           </div>
         </DialogHeader>
 
-        <div className="flex-1 flex overflow-hidden">
-          <div className="flex-1 bg-secondary/20 flex items-center justify-center overflow-auto p-4">
+        <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+          <div className="flex-1 min-h-[220px] lg:min-h-0 bg-secondary/20 flex items-center justify-center overflow-auto p-3 sm:p-4">
             {doc.file_type === 'application/pdf' && previewUrl ? (
               <iframe src={previewUrl} className="w-full h-full rounded-lg border" title="PDF Preview" />
             ) : doc.file_type === 'text/plain' && textContent !== null ? (
@@ -139,7 +165,7 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
             )}
           </div>
 
-          <div className="w-80 border-l flex flex-col overflow-y-auto">
+          <div className="w-full lg:w-80 border-t lg:border-t-0 lg:border-l flex flex-col overflow-y-auto">
             <div className="p-4 space-y-4 border-b">
               <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Details</h3>
               <div className="space-y-2.5 text-sm">
@@ -183,8 +209,8 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
                 <Button variant="outline" size="sm" className="justify-start gap-2" onClick={() => downloadDocument(doc.id, doc.name)}>
                   <Download className="w-3.5 h-3.5" /> Download
                 </Button>
-                <Button variant="outline" size="sm" className="justify-start gap-2" onClick={() => toggleShare.mutate({ id: doc.id, shared: !doc.shared })}>
-                  <Share2 className="w-3.5 h-3.5" /> {doc.shared ? 'Disable Sharing' : 'Share Link'}
+                <Button variant="outline" size="sm" className="justify-start gap-2" onClick={handleToggleShare}>
+                  <Share2 className="w-3.5 h-3.5" /> {optimisticShared ? 'Disable Sharing' : 'Share Link'}
                 </Button>
                 {shareUrl && (
                   <Button variant="ghost" size="sm" className="justify-start gap-2 text-xs text-muted-foreground" onClick={handleCopyLink}>

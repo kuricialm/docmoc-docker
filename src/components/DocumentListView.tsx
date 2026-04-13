@@ -35,7 +35,7 @@ export default function DocumentListView({ documents, onView, onRename }: Props)
             return (
               <tr
                 key={doc.id}
-                className="border-b last:border-b-0 hover:bg-secondary/20 cursor-pointer transition-colors group"
+                className="border-b last:border-b-0 cursor-pointer transition-colors group touch-manipulation md:hover:bg-secondary/20"
                 onClick={() => onView(doc)}
               >
                 <td className="py-2.5 px-4">
@@ -44,7 +44,7 @@ export default function DocumentListView({ documents, onView, onRename }: Props)
                     <span className="font-medium truncate max-w-[200px]">{doc.name}</span>
                     <button
                       onClick={(e) => { e.stopPropagation(); toggleStar.mutate({ id: doc.id, starred: !doc.starred }); }}
-                      className={cn('shrink-0', doc.starred ? 'text-amber-400' : 'text-muted-foreground/30 opacity-0 group-hover:opacity-100')}
+                      className={cn('shrink-0', doc.starred ? 'text-amber-400' : 'text-muted-foreground/30 md:opacity-0 md:group-hover:opacity-100')}
                     >
                       <Star className="w-3.5 h-3.5" fill={doc.starred ? 'currentColor' : 'none'} />
                     </button>
@@ -71,7 +71,7 @@ export default function DocumentListView({ documents, onView, onRename }: Props)
                 <td className="py-2.5 px-2">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                      <button className="p-1 rounded-lg hover:bg-secondary opacity-0 group-hover:opacity-100">
+                      <button className="p-1 rounded-lg hover:bg-secondary md:opacity-0 md:group-hover:opacity-100">
                         <MoreVertical className="w-4 h-4 text-muted-foreground" />
                       </button>
                     </DropdownMenuTrigger>

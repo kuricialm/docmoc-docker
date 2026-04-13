@@ -6,11 +6,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
+import { useTheme } from 'next-themes';
 
 const ACCENT_COLORS = ['#3B82F6', '#6366F1', '#8B5CF6', '#EC4899', '#EF4444', '#F59E0B', '#22C55E', '#06B6D4'];
 
 export default function SettingsPage() {
   const { user, profile, refreshProfile, isAdmin } = useAuth();
+  const { resolvedTheme, setTheme } = useTheme();
 
   const [newPassword, setNewPassword] = useState('');
   const [passwordLoading, setPasswordLoading] = useState(false);
@@ -116,6 +118,17 @@ export default function SettingsPage() {
               {logoUploading ? 'Uploading...' : 'Upload Logo'}
             </Button>
           </div>
+        </div>
+      </section>
+
+      <section className="bg-card border rounded-lg p-6 space-y-4">
+        <h3 className="text-sm font-semibold">Appearance</h3>
+        <div className="flex items-center justify-between gap-4">
+          <div className="space-y-1">
+            <p className="text-sm font-medium">Dark mode</p>
+            <p className="text-xs text-muted-foreground">Use a darker color palette across the app.</p>
+          </div>
+          <Switch checked={resolvedTheme === 'dark'} onCheckedChange={(checked) => setTheme(checked ? 'dark' : 'light')} />
         </div>
       </section>
 

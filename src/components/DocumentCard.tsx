@@ -19,7 +19,7 @@ export default function DocumentCard({ document: doc, onView, onRename }: Props)
 
   return (
     <div
-      className="group bg-card border rounded-xl overflow-hidden hover:shadow-lg hover:border-primary/20 transition-all duration-200 cursor-pointer"
+      className="group bg-card border rounded-xl overflow-hidden transition-all duration-200 cursor-pointer touch-manipulation active:scale-[0.995] md:hover:shadow-lg md:hover:border-primary/20"
       onClick={() => onView(doc)}
     >
       <div className="h-36 bg-secondary/30 flex items-center justify-center relative">
@@ -28,7 +28,7 @@ export default function DocumentCard({ document: doc, onView, onRename }: Props)
           onClick={(e) => { e.stopPropagation(); toggleStar.mutate({ id: doc.id, starred: !doc.starred }); }}
           className={cn(
             'absolute top-2 right-2 p-1.5 rounded-lg transition-all',
-            doc.starred ? 'text-amber-400' : 'text-muted-foreground/40 opacity-0 group-hover:opacity-100',
+            doc.starred ? 'text-amber-400' : 'text-muted-foreground/40 md:opacity-0 md:group-hover:opacity-100',
             'hover:bg-black/5'
           )}
         >
@@ -52,7 +52,7 @@ export default function DocumentCard({ document: doc, onView, onRename }: Props)
           </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-              <button className="p-1 rounded-lg hover:bg-secondary opacity-0 group-hover:opacity-100 transition-opacity">
+              <button className="p-1 rounded-lg hover:bg-secondary md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                 <MoreVertical className="w-4 h-4 text-muted-foreground" />
               </button>
             </DropdownMenuTrigger>

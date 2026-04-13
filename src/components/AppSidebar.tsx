@@ -16,7 +16,21 @@ const navItems = [
   { label: 'Trash', icon: Trash2, path: '/trash' },
 ];
 
-export default function AppSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
+type SidebarProps = {
+  collapsed: boolean;
+  onToggle: () => void;
+  isMobile?: boolean;
+  mobileOpen?: boolean;
+  onMobileClose?: () => void;
+};
+
+export default function AppSidebar({
+  collapsed,
+  onToggle,
+  isMobile = false,
+  mobileOpen = false,
+  onMobileClose,
+}: SidebarProps) {
   const location = useLocation();
   const { isAdmin, profile } = useAuth();
   const { data: tags } = useTags();
@@ -24,10 +38,17 @@ export default function AppSidebar({ collapsed, onToggle }: { collapsed: boolean
 
   return (
     <>
+      {isMobile && mobileOpen && <div className="fixed inset-0 bg-black/50 z-30" onClick={onMobileClose} />}
       <aside
+        aria-hidden={isMobile ? !mobileOpen : undefined}
         className={cn(
           'h-screen flex flex-col border-r transition-all duration-200 shrink-0',
-          collapsed ? 'w-16' : 'w-60',
+          isMobile
+            ? cn(
+              'fixed top-0 left-0 z-40 w-[85vw] max-w-72',
+              mobileOpen ? 'translate-x-0' : '-translate-x-full'
+            )
+            : collapsed ? 'w-16' : 'w-60',
         )}
         style={{ backgroundColor: 'hsl(var(--sidebar-bg))', borderColor: 'hsl(var(--sidebar-border))' }}
       >
@@ -59,6 +80,7 @@ export default function AppSidebar({ collapsed, onToggle }: { collapsed: boolean
               <Link
                 key={item.path}
                 to={item.path}
+                onClick={() => isMobile && onMobileClose?.()}
                 className={cn(
                   'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
                   active
@@ -93,6 +115,7 @@ export default function AppSidebar({ collapsed, onToggle }: { collapsed: boolean
                     <Link
                       key={tag.id}
                       to={`/tag/${tag.id}`}
+                      onClick={() => isMobile && onMobileClose?.()}
                       className={cn(
                         'flex items-center gap-2.5 py-1.5 px-2 text-sm transition-colors rounded-md',
                         active ? 'text-white font-medium bg-white/10' : 'text-white/50 hover:text-white/80 hover:bg-white/5',
@@ -119,6 +142,7 @@ export default function AppSidebar({ collapsed, onToggle }: { collapsed: boolean
         <div className="px-2 py-2 space-y-0.5 border-t" style={{ borderColor: 'hsl(var(--sidebar-border))' }}>
           <Link
             to="/settings"
+            onClick={() => isMobile && onMobileClose?.()}
             className={cn(
               'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
               location.pathname === '/settings'
@@ -134,6 +158,7 @@ export default function AppSidebar({ collapsed, onToggle }: { collapsed: boolean
           {isAdmin && (
             <Link
               to="/admin"
+              onClick={() => isMobile && onMobileClose?.()}
               className={cn(
                 'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
                 location.pathname === '/admin'

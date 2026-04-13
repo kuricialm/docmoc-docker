@@ -1,8 +1,9 @@
 import { useAuth } from '@/contexts/AuthContext';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, LayoutGrid, List, Upload, LogOut, Settings } from 'lucide-react';
+import { Search, LayoutGrid, List, Upload, LogOut, Settings, Menu, Moon, Sun } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useTheme } from 'next-themes';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,20 +18,29 @@ type Props = {
   search: string;
   onSearchChange: (val: string) => void;
   onUpload: () => void;
+  onMenuToggle?: () => void;
+  isMobile?: boolean;
 };
 
-export default function TopBar({ viewMode, onViewModeChange, search, onSearchChange, onUpload }: Props) {
+export default function TopBar({ viewMode, onViewModeChange, search, onSearchChange, onUpload, onMenuToggle, isMobile }: Props) {
   const { profile, signOut } = useAuth();
   const navigate = useNavigate();
+  const { resolvedTheme, setTheme } = useTheme();
+  const isDark = resolvedTheme === 'dark';
 
   return (
-    <header className="h-14 border-b bg-card flex items-center px-4 gap-3 shrink-0">
+    <header className="h-14 border-b bg-card flex items-center px-3 sm:px-4 gap-2 sm:gap-3 shrink-0">
+      {isMobile && (
+        <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={onMenuToggle}>
+          <Menu className="w-4 h-4" />
+        </Button>
+      )}
       <div className="relative flex-1 max-w-md">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         <Input
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Search documents..."
+          placeholder={isMobile ? 'Search...' : 'Search documents...'}
           className="pl-9 h-9 bg-secondary/50 border-0 focus-visible:ring-1"
         />
       </div>
@@ -43,9 +53,13 @@ export default function TopBar({ viewMode, onViewModeChange, search, onSearchCha
           <List className={`w-4 h-4 ${viewMode === 'list' ? 'text-primary' : 'text-muted-foreground'}`} />
         </Button>
 
-        <Button onClick={onUpload} size="sm" className="h-8 ml-2 gap-1.5 text-xs">
+        <Button variant="ghost" size="icon" className="h-8 w-8 ml-1" onClick={() => setTheme(isDark ? 'light' : 'dark')}>
+          {isDark ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-muted-foreground" />}
+        </Button>
+
+        <Button onClick={onUpload} size="sm" className="h-8 ml-1 sm:ml-2 gap-1.5 text-xs px-2 sm:px-3">
           <Upload className="w-3.5 h-3.5" />
-          Upload
+          {!isMobile && 'Upload'}
         </Button>
 
         <DropdownMenu>
