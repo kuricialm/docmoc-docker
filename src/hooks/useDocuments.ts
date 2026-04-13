@@ -32,7 +32,9 @@ export function useDocumentHistory(documentId?: string) {
       return api.getDocumentHistory(documentId);
     },
     enabled: !!user && !!documentId,
-    refetchInterval: 1000,
+    staleTime: 10_000,
+    retry: false,
+    refetchOnWindowFocus: false,
   });
 }
 

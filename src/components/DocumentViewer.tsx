@@ -78,7 +78,11 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
   const generatedTokenRef = useRef<string | null>(null);
 
   const { data: note } = useDocumentNote(doc?.id);
-  const { data: history = [] } = useDocumentHistory(doc?.id);
+  const {
+    data: history = [],
+    isLoading: isHistoryLoading,
+    error: historyError,
+  } = useDocumentHistory(doc?.id);
   const { upsertNote } = useNoteMutations();
   const { downloadDocument, toggleShare, toggleStar } = useDocumentMutations();
   const { data: allTags } = useTags();
@@ -312,6 +316,7 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
       share_password_removed: 'Share password removed',
       tag_added: `Added tag${details?.tagName ? ` "${details.tagName}"` : ''}`,
       tag_removed: `Removed tag${details?.tagName ? ` "${details.tagName}"` : ''}`,
+      permanently_deleted: 'Permanently deleted',
       note_added: 'Added comment',
       note_updated: 'Edited comment',
       comment_added: 'Added comment',
@@ -455,10 +460,18 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
 
                 <TabsContent value="history" className="px-4 sm:px-5 pb-5 pt-4 mt-0 overflow-y-auto">
                   <div className="space-y-2">
-                    {history.length === 0 && (
+                    {isHistoryLoading && (
+                      <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">Loading audit events…</div>
+                    )}
+                    {historyError && (
+                      <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">
+                        Failed to load audit events.
+                      </div>
+                    )}
+                    {!isHistoryLoading && !historyError && history.length === 0 && (
                       <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">No audit events yet.</div>
                     )}
-                    {history.map((event) => (
+                    {!isHistoryLoading && !historyError && history.map((event) => (
                       <div key={event.id} className="rounded-xl border border-border/50 bg-background/80 p-3">
                         <div className="flex items-start gap-2">
                           <History className="w-3.5 h-3.5 mt-0.5 text-primary" />
