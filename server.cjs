@@ -167,7 +167,9 @@ function backfillDocumentIdentitySnapshots() {
       FROM users u
       WHERE u.id = d.user_id
     )
-    WHERE uploaded_by_name_snapshot IS NULL OR TRIM(uploaded_by_name_snapshot) = ''
+    WHERE uploaded_by_name_snapshot IS NULL
+       OR TRIM(uploaded_by_name_snapshot) = ''
+       OR TRIM(uploaded_by_name_snapshot) = 'Unknown user'
   `).run();
 
   db.prepare(`
@@ -182,7 +184,11 @@ function backfillDocumentIdentitySnapshots() {
       'Unknown user'
     )
     WHERE d.shared = 1
-      AND (d.shared_by_name_snapshot IS NULL OR TRIM(d.shared_by_name_snapshot) = '')
+      AND (
+        d.shared_by_name_snapshot IS NULL
+        OR TRIM(d.shared_by_name_snapshot) = ''
+        OR TRIM(d.shared_by_name_snapshot) = 'Unknown user'
+      )
   `).run();
 }
 
