@@ -103,8 +103,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = useCallback(async (email: string, password: string, rememberMe = false) => {
     const u = await api.login(email, password, rememberMe);
-    setCurrentUser(u);
-    setProfile(userToProfile(u));
+    // Verify session cookie was actually persisted by checking /auth/me
+    const verified = await api.getCurrentUser();
+    if (!verified) {
+      throw new Error('Session could not be established. Your browser may be blocking cookies in this context.');
+    }
+    setCurrentUser(verified);
+    setProfile(userToProfile(verified));
   }, []);
 
   const signOut = useCallback(async () => {
