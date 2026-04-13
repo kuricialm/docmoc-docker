@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useDocuments, useDocumentMutations, Document } from '@/hooks/useDocuments';
 import { Button } from '@/components/ui/button';
 import { Share2, Copy, Lock, TimerReset, Pencil } from 'lucide-react';
@@ -15,6 +15,12 @@ export default function SharedPage({ search }: Props) {
   const { data: docs = [] } = useDocuments({ shared: true });
   const { toggleShare } = useDocumentMutations();
   const [viewDocId, setViewDocId] = useState<string | null>(null);
+  const [nowTick, setNowTick] = useState(Date.now());
+
+  useEffect(() => {
+    const t = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
 
   const filtered = docs.filter((d) => d.name.toLowerCase().includes(search.toLowerCase()));
   const viewDoc = useMemo(() => docs.find((doc) => doc.id === viewDocId) ?? null, [docs, viewDocId]);
@@ -29,14 +35,14 @@ export default function SharedPage({ search }: Props) {
   };
 
   const getTimeRemaining = (expiresAt: string) => {
-    const ms = new Date(expiresAt).getTime() - Date.now();
+    const ms = new Date(expiresAt).getTime() - nowTick;
     if (ms <= 0) return 'Expired';
-    const mins = Math.floor(ms / 60000);
-    if (mins < 60) return `${mins}m left`;
-    const hours = Math.floor(mins / 60);
-    if (hours < 48) return `${hours}h left`;
-    const days = Math.floor(hours / 24);
-    return `${days}d left`;
+    const totalSeconds = Math.floor(ms / 1000);
+    const days = Math.floor(totalSeconds / 86400);
+    const hours = Math.floor((totalSeconds % 86400) / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    return `${days}d ${hours}h ${minutes}m ${seconds}s`;
   };
 
   return (

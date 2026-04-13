@@ -39,6 +39,8 @@ export function useDocuments(filter?: {
       return (await api.getDocuments(user.id, filter)) as unknown as Document[];
     },
     enabled: !!user,
+    refetchInterval: 1000,
+    refetchOnWindowFocus: true,
   });
 }
 

@@ -16,33 +16,45 @@ export default function SharedDocument() {
   const [sharePassword, setSharePassword] = useState('');
   const [submittedPassword, setSubmittedPassword] = useState('');
   const [requiresPassword, setRequiresPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState('');
 
-  useEffect(() => {
-    const load = async () => {
-      if (!token) return;
-      try {
-        const shared = await api.getSharedDocument(token, submittedPassword || undefined);
-        if (!shared) { setLoading(false); return; }
-        setDoc(shared);
+  const loadDocument = async (password?: string) => {
+    if (!token) return;
+    setLoading(true);
+    try {
+      const shared = await api.getSharedDocument(token, password || undefined);
+      if (!shared) {
+        setDoc(null);
+        return;
+      }
+      setDoc(shared);
 
-        const blob = await api.getSharedDocumentBlob(token, submittedPassword || undefined);
-        if (blob) {
-          if (shared.file_type === 'text/plain') {
-            setTextContent(await blob.text());
-          } else if (shared.file_type === 'application/pdf' || isImageType(shared.file_type)) {
-            setPreviewUrl(URL.createObjectURL(blob));
-          }
-        }
-        setRequiresPassword(false);
-      } catch (e) {
-        if (e instanceof Error && e.message === 'PASSWORD_REQUIRED') {
-          setRequiresPassword(true);
+      const blob = await api.getSharedDocumentBlob(token, password || undefined);
+      if (blob) {
+        if (shared.file_type === 'text/plain') {
+          setTextContent(await blob.text());
+          setPreviewUrl(null);
+        } else if (shared.file_type === 'application/pdf' || isImageType(shared.file_type)) {
+          setPreviewUrl(URL.createObjectURL(blob));
+          setTextContent(null);
         }
       }
+
+      setRequiresPassword(false);
+      setPasswordError('');
+    } catch (e) {
+      if (e instanceof Error && e.message === 'PASSWORD_REQUIRED') {
+        setRequiresPassword(true);
+        setPasswordError(password ? 'Incorrect password. Please try again.' : 'This link is password protected.');
+      }
+    } finally {
       setLoading(false);
+    }
   };
-  load();
-  }, [token, submittedPassword]);
+
+  useEffect(() => {
+    loadDocument();
+  }, [token]);
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><p className="text-muted-foreground text-sm">Loading...</p></div>;
   if (requiresPassword) {
@@ -52,7 +64,16 @@ export default function SharedDocument() {
           <h1 className="text-lg font-semibold">Password protected link</h1>
           <p className="text-sm text-muted-foreground">Enter the share password to access this document.</p>
           <Input type="password" value={sharePassword} onChange={(e) => setSharePassword(e.target.value)} placeholder="Share password" />
-          <Button className="w-full" onClick={() => { setSubmittedPassword(sharePassword); setLoading(true); }}>Unlock document</Button>
+          {passwordError && <p className="text-xs text-destructive">{passwordError}</p>}
+          <Button
+            className="w-full"
+            onClick={async () => {
+              setSubmittedPassword(sharePassword);
+              await loadDocument(sharePassword);
+            }}
+          >
+            Unlock document
+          </Button>
         </div>
       </div>
     );
@@ -62,7 +83,6 @@ export default function SharedDocument() {
   const typeInfo = getFileTypeInfo(doc.file_type);
 
   const handleDownload = async () => {
-    // For shared docs, download via the shared endpoint
     try {
       const blob = await api.getSharedDocumentBlob(token!, submittedPassword || undefined);
       if (!blob) throw new Error('Download failed');

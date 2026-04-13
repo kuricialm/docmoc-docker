@@ -38,6 +38,10 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
   const { downloadDocument, toggleShare, toggleStar } = useDocumentMutations();
   const { data: allTags } = useTags();
   const { addTagToDocument, removeTagFromDocument } = useTagMutations();
+  const getLocalDateTime = () => {
+    const local = new Date(Date.now() - new Date().getTimezoneOffset() * 60000);
+    return local.toISOString().slice(0, 16);
+  };
 
   useEffect(() => {
     if (note) setNoteText(note.content);
@@ -80,7 +84,7 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
   if (!doc) return null;
   const typeInfo = getFileTypeInfo(doc.file_type);
   const activeShareToken = optimisticShareToken ?? doc.share_token ?? null;
-  const shareUrl = optimisticShared && activeShareToken ? getSharedDocumentUrl(activeShareToken) : null;
+  const shareUrl = activeShareToken ? getSharedDocumentUrl(activeShareToken) : null;
   const docTagIds = optimisticTags?.map((t) => t.id) || [];
   const availableTags = allTags?.filter((t) => !docTagIds.includes(t.id)) || [];
 
@@ -90,13 +94,12 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
   };
 
   const handleCopyLink = async () => {
-    if (!shareUrl) return;
+    if (!activeShareToken) return;
     try {
-      await copyTextToClipboard(shareUrl);
+      await copyTextToClipboard(getSharedDocumentUrl(activeShareToken));
       toast.success('Link copied');
     } catch {
-      window.prompt('Copy this link', shareUrl);
-      toast.error('Clipboard access blocked. Copy the link from the prompt.');
+      toast.error('Failed to copy link');
     }
   };
 
@@ -179,7 +182,7 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
   };
 
   const openShareSettings = () => {
-    setExpiresAt(doc.share_expires_at ? doc.share_expires_at.slice(0, 16) : '');
+    setExpiresAt(doc.share_expires_at ? doc.share_expires_at.slice(0, 16) : getLocalDateTime());
     setSharePassword('');
     setShareDialogOpen(true);
   };
@@ -297,29 +300,33 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
           <DialogHeader>
             <DialogTitle>{optimisticShared ? 'Edit share settings' : 'Share this document'}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Generate a public link by default. Optionally set an expiration time, password protection, or both.
-            </p>
-
-            <div className="space-y-2">
-              <Label htmlFor="share-expires-at">Auto-disable at (optional)</Label>
-              <Input id="share-expires-at" type="datetime-local" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} />
+          <div className="space-y-5">
+            <div className="rounded-xl border border-border/60 bg-muted/30 p-4">
+              <p className="text-sm text-muted-foreground">
+                A share link is public by default. Add expiration, password, or both for extra control.
+              </p>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="share-password">Password protect (optional)</Label>
-              <Input
-                id="share-password"
-                type="password"
-                value={sharePassword}
-                onChange={(e) => setSharePassword(e.target.value)}
-                placeholder="Leave blank for no password"
-                minLength={4}
-              />
+            <div className="space-y-4">
+              <div className="space-y-2 rounded-lg border border-border/50 p-3">
+                <Label htmlFor="share-expires-at">Auto-disable at</Label>
+                <Input id="share-expires-at" type="datetime-local" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} />
+              </div>
+
+              <div className="space-y-2 rounded-lg border border-border/50 p-3">
+                <Label htmlFor="share-password">Password protect</Label>
+                <Input
+                  id="share-password"
+                  type="password"
+                  value={sharePassword}
+                  onChange={(e) => setSharePassword(e.target.value)}
+                  placeholder="Leave blank for no password"
+                  minLength={4}
+                />
+              </div>
             </div>
 
-            <Button className="w-full" onClick={handleGenerateShareLink}>{optimisticShared ? 'Update share settings' : 'Generate link'}</Button>
+            <Button className="w-full h-10" onClick={handleGenerateShareLink}>{optimisticShared ? 'Update share settings' : 'Generate link'}</Button>
           </div>
         </DialogContent>
       </Dialog>
