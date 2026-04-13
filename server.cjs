@@ -144,6 +144,7 @@ function adminOnly(req, res, next) {
 app.post('/api/auth/login', (req, res) => {
   const email = normalizeEmail(req.body?.email);
   const password = req.body?.password;
+  const rememberMe = req.body?.rememberMe === true;
   if (!email || typeof password !== 'string') {
     return res.status(400).json({ error: 'Email and password are required' });
   }
@@ -153,7 +154,10 @@ app.post('/api/auth/login', (req, res) => {
   }
   const token = uid();
   db.prepare('INSERT INTO sessions (token, user_id, created_at) VALUES (?,?,?)').run(token, user.id, now());
-  res.cookie('session', token, { httpOnly: true, sameSite: 'lax', path: '/', maxAge: 30 * 86400000 });
+  const maxAge = rememberMe ? 30 * 86400000 : undefined; // 30 days or session-only
+  const cookieOpts = { httpOnly: true, sameSite: 'lax', path: '/' };
+  if (maxAge) cookieOpts.maxAge = maxAge;
+  res.cookie('session', token, cookieOpts);
   res.json({ id: user.id, email: user.email, fullName: user.full_name, role: user.role, accentColor: user.accent_color, avatarUrl: user.avatar_url, workspaceLogoUrl: user.workspace_logo_url });
 });
 
@@ -223,6 +227,9 @@ app.patch('/api/profile/password', auth, (req, res) => {
   }
   const hash = bcrypt.hashSync(newPassword, 10);
   db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, req.user.id);
+  // Clear all sessions for this user (force re-login)
+  db.prepare('DELETE FROM sessions WHERE user_id = ?').run(req.user.id);
+  res.clearCookie('session', { path: '/' });
   res.json({ ok: true });
 });
 
