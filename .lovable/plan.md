@@ -1,28 +1,45 @@
 
+## Plan: fix “Unknown user” in the simplest reliable way
 
-## Plan: Fix Shared Document Page
+### Root cause
+The shared-link page still depends on a mix of `shared_by_user_id`, `shared_by_name_snapshot`, and older rows that may not have those fields populated. That makes the public route fall back to `"Unknown user"` too easily.
 
-### 1. Remove the "Shared by" info bar (purple highlight)
-**File: `src/pages/SharedDocument.tsx` (lines 151-156)** — Delete the entire `<div className="rounded-xl border bg-card ...">` block that shows "Shared by / Unknown user".
+### Streamlined fix
+Because only the signed-in document owner can generate a share link in this app, I’ll simplify the logic so the shared page always uses the document owner’s identity as the sharer.
 
-### 2. Fix "Unknown user" — show actual sharer's name
-**File: `server.cjs` (lines 929-935)** — The public shared endpoint runs a SQL JOIN that correctly resolves the user's full name from the `users` table (line 904-906), but then overrides it with potentially-empty snapshot fields (lines 929-930). Fix: use the JOIN-resolved values instead of snapshots.
+### What I’ll change
 
-```js
-// Before (broken):
-const uploadedByName = resolveDisplayName(doc.uploaded_by_name_snapshot);
-const sharedByName = resolveDisplayName(doc.shared_by_name_snapshot);
+1. **Simplify the public shared-document API**
+   - In `server.cjs`, make `/api/shared/:token` resolve the name from the owner user record first:
+     - owner full name
+     - owner email
+     - existing snapshots only as legacy fallback
+   - Return that as `shared_by_name` consistently.
+   - Stop depending on the extra “who shared it” layers unless they’re only needed as fallback.
 
-// After (uses JOIN result, falls back to snapshot):
-const uploadedByName = doc.uploaded_by_name || resolveDisplayName(doc.uploaded_by_name_snapshot);
-const sharedByName = doc.shared_by_name || resolveDisplayName(doc.shared_by_name_snapshot);
-```
+2. **Backfill old shared documents**
+   - Add a lightweight startup/backfill step in `server.cjs` so already-shared documents with missing snapshots get populated from the owner’s current user record.
+   - This makes existing links work too, not just newly created ones.
 
-The SQL already aliases the JOIN columns as `uploaded_by_name` and `shared_by_name` with proper `COALESCE` logic, so these will contain the correct name. The snapshot is kept as fallback only.
+3. **Clean up share-name code**
+   - Remove unnecessary/duplicated name-resolution paths that were added earlier and are no longer needed.
+   - Keep one clear source of truth for the public shared page.
 
-Also remove `uploaded_by_name_snapshot` and `shared_by_name_snapshot` from the response spread to avoid leaking internal fields — strip them before sending.
+4. **Frontend cleanup**
+   - In `src/pages/SharedDocument.tsx`, keep the display logic simple:
+     - show `doc.shared_by_name`
+     - fallback to `doc.uploaded_by_name` only if needed
+   - Remove any dead imports / unused name helpers in that file.
 
-### Files modified
-- `src/pages/SharedDocument.tsx` — remove "Shared by" card (6 lines)
-- `server.cjs` — use JOIN-resolved names instead of snapshots (~2 lines)
+### Files to update
+- `server.cjs`
+- `src/pages/SharedDocument.tsx`
 
+### Validation I’ll do after implementation
+- Test an **existing shared link** that currently shows “Unknown user”
+- Test a **newly generated shared link**
+- Confirm the shared page shows the **signed-in owner’s full name**
+- Confirm no regression for password-protected and expiring links
+
+### Technical note
+Best/easiest path here is to treat **document owner = link generator** in the public shared view, because that already matches the current permissions model and avoids fragile extra layers.
