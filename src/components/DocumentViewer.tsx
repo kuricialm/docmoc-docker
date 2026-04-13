@@ -306,10 +306,16 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
       share_enabled: 'Sharing enabled',
       share_updated: 'Share settings updated',
       share_disabled: 'Sharing disabled',
+      share_expiry_changed: 'Share expiry changed',
+      share_password_added: 'Share password added',
+      share_password_changed: 'Share password changed',
+      share_password_removed: 'Share password removed',
       tag_added: `Added tag${details?.tagName ? ` "${details.tagName}"` : ''}`,
       tag_removed: `Removed tag${details?.tagName ? ` "${details.tagName}"` : ''}`,
       note_added: 'Added comment',
       note_updated: 'Edited comment',
+      comment_added: 'Added comment',
+      comment_edited: 'Edited comment',
     };
     return map[action] || action.split('_').join(' ');
   };
