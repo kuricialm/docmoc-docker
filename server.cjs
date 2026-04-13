@@ -158,6 +158,24 @@ function resolveDisplayName(...candidates) {
   return 'Unknown user';
 }
 
+function isResolvedDisplayName(value) {
+  return typeof value === 'string' && value.trim() !== '' && value.trim() !== 'Unknown user';
+}
+
+function getLatestSharerName(documentId) {
+  const row = db.prepare(`
+    SELECT u.full_name, u.email
+    FROM document_history h
+    LEFT JOIN users u ON u.id = h.user_id
+    WHERE h.document_id = ? AND h.action IN ('share_enabled', 'share_updated')
+    ORDER BY h.created_at DESC
+    LIMIT 1
+  `).get(documentId);
+  if (!row) return null;
+  const resolved = resolveDisplayName(row.full_name, row.email);
+  return isResolvedDisplayName(resolved) ? resolved : null;
+}
+
 function getWorkspaceLogoUrl() {
   const row = db.prepare("SELECT value FROM settings WHERE key='workspace_logo_url'").get();
   return row ? row.value : null;
@@ -719,8 +737,28 @@ app.patch('/api/documents/:id/share', auth, (req, res) => {
   }
 
   const shareToken = existing.share_token || uid();
-  db.prepare('UPDATE documents SET shared = 1, share_token = ?, share_expires_at = ?, share_password_hash = ?, shared_by_user_id = ?, shared_by_name_snapshot = ?, updated_at = ? WHERE id = ? AND user_id = ?')
-    .run(shareToken, shareExpiresAt, sharePasswordHash, req.user.id, resolveDisplayName(req.user.full_name, req.user.email), now(), req.params.id, req.user.id);
+  db.prepare(`
+    UPDATE documents
+    SET shared = 1,
+        share_token = ?,
+        share_expires_at = ?,
+        share_password_hash = ?,
+        shared_by_user_id = ?,
+        shared_by_name_snapshot = ?,
+        uploaded_by_name_snapshot = COALESCE(NULLIF(TRIM(uploaded_by_name_snapshot), ''), ?),
+        updated_at = ?
+    WHERE id = ? AND user_id = ?
+  `).run(
+    shareToken,
+    shareExpiresAt,
+    sharePasswordHash,
+    req.user.id,
+    resolveDisplayName(req.user.full_name, req.user.email),
+    resolveDisplayName(req.user.full_name, req.user.email),
+    now(),
+    req.params.id,
+    req.user.id,
+  );
   logDocumentEvent(req.params.id, req.user.id, existing.share_token ? 'share_updated' : 'share_enabled', { expiresAt: shareExpiresAt });
   if (expiryChanged) {
     logDocumentEvent(req.params.id, req.user.id, 'share_expiry_changed', {
@@ -927,7 +965,10 @@ app.get('/api/shared/:token', (req, res) => {
     JOIN document_tags dt ON dt.tag_id = t.id WHERE dt.document_id = ?
   `).all(doc.id);
   const uploadedByName = resolveDisplayName(doc.uploaded_by_name, doc.uploaded_by_name_snapshot);
-  const sharedByName = resolveDisplayName(doc.shared_by_name, doc.shared_by_name_snapshot, uploadedByName);
+  const sharedByNameCandidate = resolveDisplayName(doc.shared_by_name, doc.shared_by_name_snapshot, uploadedByName);
+  const sharedByName = isResolvedDisplayName(sharedByNameCandidate)
+    ? sharedByNameCandidate
+    : resolveDisplayName(getLatestSharerName(doc.id), uploadedByName);
   res.json({
     ...doc,
     name: normalizeUploadedFilename(doc.name),
