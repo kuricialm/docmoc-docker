@@ -25,7 +25,7 @@ export default function DocumentCard({ document: doc, onView, onRename }: Props)
       className="group bg-muted/40 rounded-xl overflow-hidden cursor-pointer touch-manipulation active:scale-[0.98] md:hover:bg-muted transition-all duration-150"
       onClick={() => onView(doc)}
     >
-      <div className="h-36 sm:h-40 bg-muted/60 flex items-center justify-center relative">
+      <div className="h-36 sm:h-40 bg-muted/60 flex items-center justify-center relative overflow-hidden">
         <DocumentThumbnail docId={doc.id} fileType={doc.file_type} enabled={settings.thumbnailPreviews} />
         <button
           onClick={(e) => { e.stopPropagation(); toggleStar.mutate({ id: doc.id, starred: !doc.starred }); }}

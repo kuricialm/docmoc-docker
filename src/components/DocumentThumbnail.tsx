@@ -27,7 +27,7 @@ async function renderPdfThumb(blob: Blob): Promise<string> {
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
   const page = await pdf.getPage(1);
 
-  const scale = 400 / page.getViewport({ scale: 1 }).width;
+  const scale = 800 / page.getViewport({ scale: 1 }).width;
   const viewport = page.getViewport({ scale });
 
   const canvas = document.createElement('canvas');
@@ -36,7 +36,7 @@ async function renderPdfThumb(blob: Blob): Promise<string> {
   const ctx = canvas.getContext('2d')!;
 
   await page.render({ canvasContext: ctx, viewport }).promise;
-  const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
   pdf.destroy();
   return dataUrl;
 }
@@ -97,12 +97,14 @@ export default memo(function DocumentThumbnail({ docId, fileType, enabled }: Pro
 
   if (src) {
     return (
-      <img
-        src={src}
-        alt=""
-        className="w-full h-full object-cover"
-        draggable={false}
-      />
+      <div className="w-full h-full flex items-center justify-center p-3">
+        <img
+          src={src}
+          alt=""
+          className="max-h-[85%] max-w-[70%] object-contain shadow-md rounded-sm"
+          draggable={false}
+        />
+      </div>
     );
   }
 
