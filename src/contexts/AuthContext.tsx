@@ -17,7 +17,7 @@ type AuthContextType = {
   isAdmin: boolean;
   profile: Profile | null;
   signOut: () => void;
-  signIn: (email: string, password: string) => Promise<void>;
+  signIn: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
   refreshProfile: () => void;
 };
 
@@ -83,8 +83,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }).catch(() => setLoading(false));
   }, []);
 
-  const signIn = useCallback(async (email: string, password: string) => {
-    const u = await api.login(email, password);
+  const signIn = useCallback(async (email: string, password: string, rememberMe = false) => {
+    const u = await api.login(email, password, rememberMe);
     setCurrentUser(u);
     setProfile(userToProfile(u));
   }, []);

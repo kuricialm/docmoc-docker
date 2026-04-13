@@ -11,7 +11,7 @@ import { useTheme } from 'next-themes';
 const ACCENT_COLORS = ['#3B82F6', '#6366F1', '#8B5CF6', '#EC4899', '#EF4444', '#F59E0B', '#22C55E', '#06B6D4'];
 
 export default function SettingsPage() {
-  const { user, profile, refreshProfile, isAdmin } = useAuth();
+  const { user, profile, refreshProfile, isAdmin, signOut } = useAuth();
   const { resolvedTheme, setTheme } = useTheme();
 
   const [newPassword, setNewPassword] = useState('');
@@ -35,8 +35,10 @@ export default function SettingsPage() {
     setPasswordLoading(true);
     try {
       await api.updatePassword(user.id, newPassword);
-      toast.success('Password updated');
+      toast.success('Password updated. Please sign in again.');
       setNewPassword('');
+      // Clear session after password change
+      setTimeout(() => signOut(), 1500);
     } catch (err: any) { toast.error(err.message); }
     setPasswordLoading(false);
   };
@@ -86,7 +88,7 @@ export default function SettingsPage() {
   };
 
   const Section = ({ children, className = '' }: { children: React.ReactNode; className?: string }) => (
-    <section className={`bg-card border border-border/50 rounded-xl p-5 sm:p-6 space-y-4 hover:border-border/80 transition-colors duration-200 ${className}`}>
+    <section className={`bg-background border border-border rounded-xl p-5 sm:p-6 space-y-4 hover:border-border/80 transition-colors duration-150 ${className}`}>
       {children}
     </section>
   );
@@ -101,7 +103,7 @@ export default function SettingsPage() {
           <div className="flex items-center justify-between gap-4">
             <div className="space-y-1">
               <p className="text-sm font-medium">Allow new user registration</p>
-              <p className="text-xs text-muted-foreground/80">When disabled, only admins can create users from the Admin page.</p>
+              <p className="text-xs text-muted-foreground">When disabled, only admins can create users from the Admin page.</p>
             </div>
             <Switch checked={registrationEnabled} onCheckedChange={handleRegistrationToggle} aria-label="Toggle registration" />
           </div>
@@ -128,6 +130,7 @@ export default function SettingsPage() {
             <Label className="text-xs text-muted-foreground">New Password</Label>
             <Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Enter new password" required minLength={6} className="h-10 rounded-lg" />
           </div>
+          <p className="text-xs text-muted-foreground">You will be signed out after changing your password.</p>
           <Button type="submit" size="sm" className="rounded-lg" disabled={passwordLoading}>
             {passwordLoading ? 'Updating...' : 'Update Password'}
           </Button>
@@ -138,9 +141,9 @@ export default function SettingsPage() {
         <h3 className="text-sm font-semibold">Workspace Logo</h3>
         <div className="flex items-center gap-4">
           {profile?.workspace_logo_url ? (
-            <img src={profile.workspace_logo_url} alt="Logo" className="w-12 h-12 rounded-xl object-cover border border-border/50" />
+            <img src={profile.workspace_logo_url} alt="Logo" className="w-12 h-12 rounded-xl object-cover border border-border" />
           ) : (
-            <div className="w-12 h-12 rounded-xl bg-secondary/50 flex items-center justify-center text-muted-foreground text-xs">No logo</div>
+            <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center text-muted-foreground text-xs">No logo</div>
           )}
           <div>
             <input type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" id="logo-upload" />
@@ -156,7 +159,7 @@ export default function SettingsPage() {
         <div className="flex items-center justify-between gap-4">
           <div className="space-y-1">
             <p className="text-sm font-medium">Dark mode</p>
-            <p className="text-xs text-muted-foreground/80">Use a darker color palette across the app.</p>
+            <p className="text-xs text-muted-foreground">Use a darker color palette across the app.</p>
           </div>
           <Switch checked={resolvedTheme === 'dark'} onCheckedChange={(checked) => setTheme(checked ? 'dark' : 'light')} />
         </div>

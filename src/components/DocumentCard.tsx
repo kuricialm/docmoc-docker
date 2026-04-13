@@ -19,16 +19,16 @@ export default function DocumentCard({ document: doc, onView, onRename }: Props)
 
   return (
     <div
-      className="group bg-card border border-border/50 rounded-xl overflow-hidden cursor-pointer touch-manipulation active:scale-[0.98] md:hover:shadow-md md:hover:border-border md:hover:scale-[1.01] transition-all duration-200"
+      className="group bg-muted/40 rounded-xl overflow-hidden cursor-pointer touch-manipulation active:scale-[0.98] md:hover:bg-muted transition-all duration-150"
       onClick={() => onView(doc)}
     >
-      <div className="h-36 sm:h-40 bg-gradient-to-br from-secondary/40 to-secondary/20 flex items-center justify-center relative">
+      <div className="h-36 sm:h-40 bg-muted/60 flex items-center justify-center relative">
         <FileTypeIcon fileType={doc.file_type} size="lg" />
         <button
           onClick={(e) => { e.stopPropagation(); toggleStar.mutate({ id: doc.id, starred: !doc.starred }); }}
           className={cn(
-            'absolute top-2.5 right-2.5 p-1.5 rounded-lg backdrop-blur-sm transition-all duration-150',
-            doc.starred ? 'text-amber-400 bg-amber-400/10' : 'text-muted-foreground/30 md:opacity-0 md:group-hover:opacity-100 hover:bg-secondary/80',
+            'absolute top-2.5 right-2.5 p-1.5 rounded-lg transition-all duration-150',
+            doc.starred ? 'text-amber-500' : 'text-muted-foreground/30 md:opacity-0 md:group-hover:opacity-100 hover:text-muted-foreground',
           )}
         >
           <Star className="w-4 h-4" fill={doc.starred ? 'currentColor' : 'none'} />
@@ -40,18 +40,15 @@ export default function DocumentCard({ document: doc, onView, onRename }: Props)
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium truncate leading-snug">{doc.name}</p>
             <div className="flex items-center gap-2 mt-1.5">
-              <span
-                className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md"
-                style={{ color: typeInfo.color, backgroundColor: typeInfo.bgColor }}
-              >
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                 {typeInfo.label}
               </span>
-              <span className="text-[11px] text-muted-foreground">{formatFileSize(doc.file_size)}</span>
+              <span className="text-[11px] text-muted-foreground/70">{formatFileSize(doc.file_size)}</span>
             </div>
           </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-              <button className="p-1.5 rounded-lg hover:bg-secondary md:opacity-0 md:group-hover:opacity-100 transition-all duration-150">
+              <button className="p-1.5 rounded-lg hover:bg-muted md:opacity-0 md:group-hover:opacity-100 transition-all duration-150">
                 <MoreVertical className="w-4 h-4 text-muted-foreground" />
               </button>
             </DropdownMenuTrigger>
@@ -85,7 +82,7 @@ export default function DocumentCard({ document: doc, onView, onRename }: Props)
           </div>
         )}
 
-        <p className="text-[11px] text-muted-foreground/70">
+        <p className="text-[11px] text-muted-foreground/60">
           {new Date(doc.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
         </p>
       </div>

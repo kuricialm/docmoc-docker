@@ -29,28 +29,28 @@ export default function TopBar({ viewMode, onViewModeChange, search, onSearchCha
   const isDark = resolvedTheme === 'dark';
 
   return (
-    <header className="h-14 border-b border-border/50 bg-card/80 backdrop-blur-md flex items-center px-3 sm:px-5 gap-2 sm:gap-3 shrink-0 sticky top-0 z-20">
+    <header className="h-14 border-b border-border bg-background flex items-center px-3 sm:px-5 gap-2 sm:gap-3 shrink-0 sticky top-0 z-20">
       {isMobile && (
         <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={onMenuToggle}>
           <Menu className="w-4 h-4" />
         </Button>
       )}
       <div className="relative flex-1 max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60" />
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         <Input
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder={isMobile ? 'Search...' : 'Search documents...'}
-          className="pl-9 h-9 bg-secondary/40 border-border/30 focus-visible:ring-1 focus-visible:bg-card transition-all duration-150 rounded-lg"
+          className="pl-9 h-9 bg-muted border-transparent focus-visible:border-border focus-visible:ring-0 rounded-lg"
         />
       </div>
 
       <div className="flex items-center gap-1 ml-auto">
-        <div className="hidden sm:flex items-center bg-secondary/40 rounded-lg p-0.5">
+        <div className="hidden sm:flex items-center bg-muted rounded-lg p-0.5">
           <Button
             variant="ghost"
             size="icon"
-            className={`h-7 w-7 rounded-md ${viewMode === 'grid' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground'}`}
+            className={`h-7 w-7 rounded-md ${viewMode === 'grid' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground'}`}
             onClick={() => onViewModeChange('grid')}
           >
             <LayoutGrid className="w-3.5 h-3.5" />
@@ -58,7 +58,7 @@ export default function TopBar({ viewMode, onViewModeChange, search, onSearchCha
           <Button
             variant="ghost"
             size="icon"
-            className={`h-7 w-7 rounded-md ${viewMode === 'list' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground'}`}
+            className={`h-7 w-7 rounded-md ${viewMode === 'list' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground'}`}
             onClick={() => onViewModeChange('list')}
           >
             <List className="w-3.5 h-3.5" />
@@ -76,7 +76,7 @@ export default function TopBar({ viewMode, onViewModeChange, search, onSearchCha
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="ml-2 w-8 h-8 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center text-xs font-semibold text-primary hover:from-primary/30 hover:to-primary/20 transition-all duration-150 ring-2 ring-transparent hover:ring-primary/20">
+            <button className="ml-2 w-8 h-8 rounded-full bg-muted flex items-center justify-center text-xs font-semibold text-foreground hover:bg-muted/80 transition-all duration-150">
               {(profile?.full_name || profile?.email || 'U').charAt(0).toUpperCase()}
             </button>
           </DropdownMenuTrigger>

@@ -78,10 +78,10 @@ function mapUser(u: any): User {
 }
 
 // ---------- Auth ----------
-export async function login(email: string, password: string): Promise<User> {
+export async function login(email: string, password: string, rememberMe = false): Promise<User> {
   const u = await apiFetch<any>('/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password, rememberMe }),
   });
   return mapUser(u);
 }
