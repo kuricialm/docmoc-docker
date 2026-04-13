@@ -1,12 +1,13 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useDocuments, useDocumentMutations, Document } from '@/hooks/useDocuments';
 import { Button } from '@/components/ui/button';
-import { Share2, Copy } from 'lucide-react';
+import { Share2, Copy, Lock, TimerReset, Pencil } from 'lucide-react';
 import { formatFileSize } from '@/lib/fileTypes';
 import FileTypeIcon from '@/components/FileTypeIcon';
 import { toast } from 'sonner';
 import DocumentViewer from '@/components/DocumentViewer';
 import { copyTextToClipboard, getSharedDocumentUrl } from '@/lib/share';
+import { Badge } from '@/components/ui/badge';
 
 type Props = { search: string };
 
@@ -14,6 +15,12 @@ export default function SharedPage({ search }: Props) {
   const { data: docs = [] } = useDocuments({ shared: true });
   const { toggleShare } = useDocumentMutations();
   const [viewDocId, setViewDocId] = useState<string | null>(null);
+  const [nowTick, setNowTick] = useState(Date.now());
+
+  useEffect(() => {
+    const t = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
 
   const filtered = docs.filter((d) => d.name.toLowerCase().includes(search.toLowerCase()));
   const viewDoc = useMemo(() => docs.find((doc) => doc.id === viewDocId) ?? null, [docs, viewDocId]);
@@ -25,6 +32,17 @@ export default function SharedPage({ search }: Props) {
     } catch {
       toast.error('Failed to copy link');
     }
+  };
+
+  const getTimeRemaining = (expiresAt: string) => {
+    const ms = new Date(expiresAt).getTime() - nowTick;
+    if (ms <= 0) return 'Expired';
+    const totalSeconds = Math.floor(ms / 1000);
+    const days = Math.floor(totalSeconds / 86400);
+    const hours = Math.floor((totalSeconds % 86400) / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    return `${days}d ${hours}h ${minutes}m ${seconds}s`;
   };
 
   return (
@@ -44,6 +62,11 @@ export default function SharedPage({ search }: Props) {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate cursor-pointer hover:text-primary transition-colors duration-150" onClick={() => setViewDocId(doc.id)}>{doc.name}</p>
                   <p className="text-xs text-muted-foreground/70 mt-0.5">{formatFileSize(doc.file_size)}</p>
+                  <div className="flex flex-wrap gap-1.5 mt-1.5">
+                    {!doc.share_expires_at && !doc.share_has_password && <Badge variant="secondary" className="text-[10px]">Public</Badge>}
+                    {doc.share_expires_at && <Badge variant="secondary" className="text-[10px] gap-1"><TimerReset className="w-3 h-3" /> {getTimeRemaining(doc.share_expires_at)}</Badge>}
+                    {doc.share_has_password && <Badge variant="secondary" className="text-[10px] gap-1"><Lock className="w-3 h-3" /> Password</Badge>}
+                  </div>
                 </div>
                 <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                   {doc.share_token && (
@@ -51,6 +74,9 @@ export default function SharedPage({ search }: Props) {
                       <Copy className="w-3 h-3" /> <span className="hidden sm:inline">Copy Link</span>
                     </Button>
                   )}
+                  <Button variant="ghost" size="sm" onClick={() => setViewDocId(doc.id)} className="gap-1.5 text-xs rounded-lg h-8 px-2 sm:px-3">
+                    <Pencil className="w-3 h-3" /> <span className="hidden sm:inline">Edit</span>
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"

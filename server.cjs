@@ -59,6 +59,16 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);
 `);
 
+function ensureDocumentColumn(columnName, sqlDefinition) {
+  const cols = db.prepare('PRAGMA table_info(documents)').all();
+  if (!cols.some((c) => c.name === columnName)) {
+    db.exec(`ALTER TABLE documents ADD COLUMN ${sqlDefinition}`);
+  }
+}
+
+ensureDocumentColumn('share_expires_at', 'share_expires_at TEXT');
+ensureDocumentColumn('share_password_hash', 'share_password_hash TEXT');
+
 // Seed admin
 const userCount = db.prepare('SELECT COUNT(*) as c FROM users').get().c;
 if (userCount === 0) {
@@ -125,6 +135,23 @@ function cleanupTrash() {
 }
 cleanupTrash();
 setInterval(cleanupTrash, 3600000);
+
+function cleanupExpiredShares(userId) {
+  const isoNow = now();
+  if (userId) {
+    db.prepare(`
+      UPDATE documents
+      SET shared = 0, share_token = NULL, share_expires_at = NULL, share_password_hash = NULL, updated_at = ?
+      WHERE user_id = ? AND shared = 1 AND share_expires_at IS NOT NULL AND share_expires_at <= ?
+    `).run(isoNow, userId, isoNow);
+    return;
+  }
+  db.prepare(`
+    UPDATE documents
+    SET shared = 0, share_token = NULL, share_expires_at = NULL, share_password_hash = NULL, updated_at = ?
+    WHERE shared = 1 AND share_expires_at IS NOT NULL AND share_expires_at <= ?
+  `).run(isoNow, isoNow);
+}
 
 // ── Express app ──
 const app = express();
@@ -362,6 +389,7 @@ app.post('/api/auth/register', (req, res) => {
 
 // ── Documents ──
 app.get('/api/documents', auth, (req, res) => {
+  cleanupExpiredShares(req.user.id);
   const { trashed, starred, shared, tagId, recent } = req.query;
   let sql = 'SELECT * FROM documents WHERE user_id = ?';
   const params = [req.user.id];
@@ -386,14 +414,18 @@ app.get('/api/documents', auth, (req, res) => {
     JOIN document_tags dt ON dt.tag_id = t.id
     WHERE dt.document_id = ?
   `);
-  docs = docs.map(d => ({
-    ...d,
+  docs = docs.map(d => {
+    const { share_password_hash, ...rest } = d;
+    return ({
+    ...rest,
     starred: !!d.starred,
     trashed: !!d.trashed,
     shared: !!d.shared,
+    share_has_password: !!share_password_hash,
     tag_ids: [],
     tags: tagStmt.all(d.id),
-  }));
+  });
+  });
 
   if (tagId) {
     docs = docs.filter(d => d.tags.some(t => t.id === tagId));
@@ -464,10 +496,36 @@ app.delete('/api/documents/:id', auth, (req, res) => {
 });
 
 app.patch('/api/documents/:id/share', auth, (req, res) => {
-  const { shared } = req.body;
-  const shareToken = shared ? uid() : null;
-  db.prepare('UPDATE documents SET shared = ?, share_token = ?, updated_at = ? WHERE id = ? AND user_id = ?')
-    .run(shared ? 1 : 0, shareToken, now(), req.params.id, req.user.id);
+  const { shared, config } = req.body;
+  const existing = db.prepare('SELECT id, share_token FROM documents WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+  if (!existing) return res.status(404).json({ error: 'Not found' });
+  if (!shared) {
+    db.prepare('UPDATE documents SET shared = 0, share_token = NULL, share_expires_at = NULL, share_password_hash = NULL, updated_at = ? WHERE id = ? AND user_id = ?')
+      .run(now(), req.params.id, req.user.id);
+    return res.json({ ok: true, share_token: null });
+  }
+
+  let shareExpiresAt = null;
+  let sharePasswordHash = null;
+
+  if (config?.expiresAt) {
+    const parsedDate = new Date(config.expiresAt);
+    if (Number.isNaN(parsedDate.getTime()) || parsedDate.getTime() <= Date.now()) {
+      return res.status(400).json({ error: 'Expiration must be a future date/time' });
+    }
+    shareExpiresAt = parsedDate.toISOString();
+  }
+
+  if (config?.password) {
+    if (typeof config.password !== 'string' || config.password.length < 4) {
+      return res.status(400).json({ error: 'Password must be at least 4 characters' });
+    }
+    sharePasswordHash = bcrypt.hashSync(config.password, 10);
+  }
+
+  const shareToken = existing.share_token || uid();
+  db.prepare('UPDATE documents SET shared = 1, share_token = ?, share_expires_at = ?, share_password_hash = ?, updated_at = ? WHERE id = ? AND user_id = ?')
+    .run(shareToken, shareExpiresAt, sharePasswordHash, now(), req.params.id, req.user.id);
   res.json({ ok: true, share_token: shareToken });
 });
 
@@ -555,6 +613,17 @@ app.get('/api/shared/:token', (req, res) => {
   const doc = db.prepare('SELECT * FROM documents WHERE share_token = ? AND shared = 1 AND trashed = 0')
     .get(req.params.token);
   if (!doc) return res.status(404).json({ error: 'Not found' });
+  if (doc.share_expires_at && new Date(doc.share_expires_at).getTime() <= Date.now()) {
+    db.prepare('UPDATE documents SET shared = 0, share_token = NULL, share_expires_at = NULL, share_password_hash = NULL, updated_at = ? WHERE id = ?')
+      .run(now(), doc.id);
+    return res.status(404).json({ error: 'Not found' });
+  }
+  if (doc.share_password_hash) {
+    const suppliedPassword = typeof req.query.password === 'string' ? req.query.password : '';
+    if (!suppliedPassword || !bcrypt.compareSync(suppliedPassword, doc.share_password_hash)) {
+      return res.status(401).json({ error: 'Password required' });
+    }
+  }
   const tags = db.prepare(`
     SELECT t.id, t.name, t.color FROM tags t
     JOIN document_tags dt ON dt.tag_id = t.id WHERE dt.document_id = ?
@@ -566,6 +635,17 @@ app.get('/api/shared/:token/download', (req, res) => {
   const doc = db.prepare('SELECT * FROM documents WHERE share_token = ? AND shared = 1 AND trashed = 0')
     .get(req.params.token);
   if (!doc) return res.status(404).json({ error: 'Not found' });
+  if (doc.share_expires_at && new Date(doc.share_expires_at).getTime() <= Date.now()) {
+    db.prepare('UPDATE documents SET shared = 0, share_token = NULL, share_expires_at = NULL, share_password_hash = NULL, updated_at = ? WHERE id = ?')
+      .run(now(), doc.id);
+    return res.status(404).json({ error: 'Not found' });
+  }
+  if (doc.share_password_hash) {
+    const suppliedPassword = typeof req.query.password === 'string' ? req.query.password : '';
+    if (!suppliedPassword || !bcrypt.compareSync(suppliedPassword, doc.share_password_hash)) {
+      return res.status(401).json({ error: 'Password required' });
+    }
+  }
   const filePath = path.join(DATA_DIR, doc.storage_path);
   res.setHeader('Content-Type', doc.file_type);
   res.sendFile(filePath);

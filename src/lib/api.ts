@@ -22,6 +22,8 @@ export type DocRecord = {
   trashed_at: string | null;
   shared: boolean;
   share_token: string | null;
+  share_expires_at?: string | null;
+  share_has_password?: boolean;
   created_at: string;
   updated_at: string;
   tag_ids: string[];
@@ -232,10 +234,19 @@ export async function permanentDelete(id: string, _storagePath: string): Promise
   await apiFetch(`/documents/${id}`, { method: 'DELETE' });
 }
 
-export async function toggleShare(id: string, shared: boolean): Promise<{ share_token: string | null }> {
+export type ShareConfig = {
+  expiresAt?: string;
+  password?: string;
+};
+
+export async function toggleShare(
+  id: string,
+  shared: boolean,
+  config?: ShareConfig,
+): Promise<{ share_token: string | null }> {
   return apiFetch(`/documents/${id}/share`, {
     method: 'PATCH',
-    body: JSON.stringify({ shared }),
+    body: JSON.stringify({ shared, config }),
   });
 }
 
@@ -261,17 +272,18 @@ export async function getDocumentBlob(docId: string): Promise<Blob | undefined> 
   }
 }
 
-export async function getSharedDocument(token: string): Promise<(DocRecord & { tags: TagRecord[] }) | null> {
-  try {
-    return await apiFetch(`/shared/${token}`);
-  } catch {
-    return null;
-  }
+export async function getSharedDocument(token: string, password?: string): Promise<(DocRecord & { tags: TagRecord[] }) | null> {
+  const suffix = password ? `?password=${encodeURIComponent(password)}` : '';
+  const res = await fetch(`${BASE}/shared/${token}${suffix}`, { credentials: 'include' });
+  if (res.status === 401) throw new Error('PASSWORD_REQUIRED');
+  if (!res.ok) return null;
+  return res.json();
 }
 
-export async function getSharedDocumentBlob(token: string): Promise<Blob | undefined> {
+export async function getSharedDocumentBlob(token: string, password?: string): Promise<Blob | undefined> {
   try {
-    const res = await fetch(`${BASE}/shared/${token}/download`, { credentials: 'include' });
+    const suffix = password ? `?password=${encodeURIComponent(password)}` : '';
+    const res = await fetch(`${BASE}/shared/${token}/download${suffix}`, { credentials: 'include' });
     if (!res.ok) return undefined;
     return res.blob();
   } catch {
