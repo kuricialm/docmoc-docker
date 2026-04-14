@@ -1,6 +1,6 @@
 import { Document, useDocumentMutations } from '@/hooks/useDocuments';
 import { getFileTypeInfo, formatFileSize } from '@/lib/fileTypes';
-import { Star, MoreVertical, Download, Edit2, Share2, Trash2, Eye } from 'lucide-react';
+import { Star, MoreVertical, Download, Edit2, Trash2, Eye, Check } from 'lucide-react';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
@@ -15,10 +15,12 @@ type Props = {
   document: Document;
   onView: (doc: Document) => void;
   onRename: (doc: Document) => void;
+  selected?: boolean;
+  onToggleSelect?: (doc: Document) => void;
 };
 
-export default function DocumentCard({ document: doc, onView, onRename }: Props) {
-  const { toggleStar, trashDocument, toggleShare, downloadDocument } = useDocumentMutations();
+export default function DocumentCard({ document: doc, onView, onRename, selected = false, onToggleSelect }: Props) {
+  const { toggleStar, trashDocument, downloadDocument } = useDocumentMutations();
   const typeInfo = getFileTypeInfo(doc.file_type);
   const { settings } = useLocalSettings();
 
@@ -29,6 +31,19 @@ export default function DocumentCard({ document: doc, onView, onRename }: Props)
     >
       <div className="h-36 sm:h-40 bg-muted/60 flex items-center justify-center relative overflow-hidden">
         <DocumentThumbnail docId={doc.id} fileType={doc.file_type} enabled={settings.thumbnailPreviews} />
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleSelect?.(doc);
+          }}
+          className={cn(
+            'absolute top-2.5 left-2.5 w-6 h-6 rounded-md border flex items-center justify-center transition-colors',
+            selected ? 'bg-primary border-primary text-primary-foreground' : 'bg-background/80 border-border text-transparent hover:text-muted-foreground',
+          )}
+          aria-label={selected ? 'Deselect document' : 'Select document'}
+        >
+          <Check className="w-3.5 h-3.5" />
+        </button>
         <button
           onClick={(e) => { e.stopPropagation(); toggleStar.mutate({ id: doc.id, starred: !doc.starred }); }}
           className={cn(
@@ -72,9 +87,6 @@ export default function DocumentCard({ document: doc, onView, onRename }: Props)
               </DropdownMenuItem>
               <DropdownMenuItem onClick={(e) => { e.stopPropagation(); downloadDocument(doc.id, doc.name); }} className="gap-2">
                 <Download className="w-3.5 h-3.5" /> Download
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); toggleShare.mutate({ id: doc.id, shared: !doc.shared }); }} className="gap-2">
-                <Share2 className="w-3.5 h-3.5" /> {doc.shared ? 'Unshare' : 'Share'}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={(e) => { e.stopPropagation(); trashDocument.mutate(doc.id); }} className="gap-2 text-destructive">
                 <Trash2 className="w-3.5 h-3.5" /> Move to Trash

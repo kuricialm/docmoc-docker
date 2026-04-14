@@ -40,7 +40,7 @@ db.exec(`
     file_type TEXT, file_size INTEGER, storage_path TEXT,
     starred INTEGER DEFAULT 0, trashed INTEGER DEFAULT 0, trashed_at TEXT,
     shared INTEGER DEFAULT 0, share_token TEXT,
-    uploaded_by_name_snapshot TEXT, shared_by_name_snapshot TEXT,
+    uploaded_by_name_snapshot TEXT,
     created_at TEXT, updated_at TEXT,
     FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
   );
@@ -84,9 +84,12 @@ function ensureDocumentColumn(columnName, sqlDefinition) {
 
 ensureDocumentColumn('share_expires_at', 'share_expires_at TEXT');
 ensureDocumentColumn('share_password_hash', 'share_password_hash TEXT');
-ensureDocumentColumn('shared_by_user_id', 'shared_by_user_id TEXT');
 ensureDocumentColumn('uploaded_by_name_snapshot', 'uploaded_by_name_snapshot TEXT');
-ensureDocumentColumn('shared_by_name_snapshot', 'shared_by_name_snapshot TEXT');
+db.exec(`
+  UPDATE users
+  SET full_name = email
+  WHERE full_name IS NULL OR TRIM(full_name) = ''
+`);
 
 // Seed admin
 const userCount = db.prepare('SELECT COUNT(*) as c FROM users').get().c;
@@ -542,13 +545,12 @@ app.get('/api/documents', auth, (req, res) => {
   `);
   docs = docs.map(d => {
     const { share_password_hash, ...rest } = d;
-    const uploadedByName = resolveDisplayName(req.user.full_name, req.user.email);
-    const sharedByName = resolveDisplayName(rest.shared_by_name_snapshot, req.user.full_name, req.user.email);
+    const uploadedByName = rest.uploaded_by_name_snapshot || req.user.full_name || req.user.email || null;
     return ({
       ...rest,
       name: normalizeUploadedFilename(rest.name),
       uploaded_by_name: uploadedByName,
-      shared_by_name: sharedByName,
+      shared_by_name: uploadedByName,
       starred: !!d.starred,
       trashed: !!d.trashed,
       shared: !!d.shared,
@@ -580,14 +582,13 @@ app.post('/api/documents/upload', auth, upload.single('file'), (req, res) => {
     file_size: req.file.size, storage_path: storagePath,
     starred: 0, trashed: 0, trashed_at: null, shared: 0, share_token: null,
     uploaded_by_name_snapshot: resolveDisplayName(req.user.full_name, req.user.email),
-    shared_by_name_snapshot: resolveDisplayName(req.user.full_name, req.user.email),
     created_at: now(), updated_at: now(),
   };
   db.prepare(`INSERT INTO documents (id, user_id, name, file_type, file_size, storage_path,
-    starred, trashed, trashed_at, shared, share_token, uploaded_by_name_snapshot, shared_by_name_snapshot, created_at, updated_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+    starred, trashed, trashed_at, shared, share_token, uploaded_by_name_snapshot, created_at, updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
     .run(doc.id, doc.user_id, doc.name, doc.file_type, doc.file_size, doc.storage_path,
-      doc.starred, doc.trashed, doc.trashed_at, doc.shared, doc.share_token, doc.uploaded_by_name_snapshot, doc.shared_by_name_snapshot, doc.created_at, doc.updated_at);
+      doc.starred, doc.trashed, doc.trashed_at, doc.shared, doc.share_token, doc.uploaded_by_name_snapshot, doc.created_at, doc.updated_at);
   logDocumentEvent(doc.id, req.user.id, 'uploaded', { name: doc.name });
 
   res.json({
@@ -663,7 +664,7 @@ app.patch('/api/documents/:id/share', auth, (req, res) => {
   if (!existing) return res.status(404).json({ error: 'Not found' });
   if (!shared) {
     if (!existing.shared) return res.json({ ok: true, share_token: null });
-    db.prepare('UPDATE documents SET shared = 0, share_token = NULL, share_expires_at = NULL, share_password_hash = NULL, shared_by_user_id = NULL, shared_by_name_snapshot = NULL, updated_at = ? WHERE id = ? AND user_id = ?')
+    db.prepare('UPDATE documents SET shared = 0, share_token = NULL, share_expires_at = NULL, share_password_hash = NULL, updated_at = ? WHERE id = ? AND user_id = ?')
       .run(now(), req.params.id, req.user.id);
     logDocumentEvent(req.params.id, req.user.id, 'share_disabled');
     return res.json({ ok: true, share_token: null });
@@ -707,16 +708,12 @@ app.patch('/api/documents/:id/share', auth, (req, res) => {
         share_token = ?,
         share_expires_at = ?,
         share_password_hash = ?,
-        shared_by_user_id = ?,
-        shared_by_name_snapshot = ?,
         updated_at = ?
     WHERE id = ? AND user_id = ?
   `).run(
     shareToken,
     shareExpiresAt,
     sharePasswordHash,
-    req.user.id,
-    resolveDisplayName(req.user.full_name, req.user.email),
     now(),
     req.params.id,
     req.user.id,
@@ -900,15 +897,7 @@ app.get('/api/documents/:id/history', auth, (req, res) => {
 
 // ── Shared (no auth) ──
 app.get('/api/shared/:token', (req, res) => {
-  const doc = db.prepare(`
-    SELECT d.*,
-           COALESCE(NULLIF(TRIM(u.full_name), ''), u.email, 'Unknown user') AS uploaded_by_name,
-           COALESCE(NULLIF(TRIM(s.full_name), ''), s.email, NULLIF(TRIM(u.full_name), ''), u.email, 'Unknown user') AS shared_by_name
-    FROM documents d
-    LEFT JOIN users u ON u.id = d.user_id
-    LEFT JOIN users s ON s.id = COALESCE(d.shared_by_user_id, d.user_id)
-    WHERE d.share_token = ? AND d.shared = 1 AND d.trashed = 0
-  `)
+  const doc = db.prepare('SELECT * FROM documents WHERE share_token = ? AND shared = 1 AND trashed = 0')
     .get(req.params.token);
   if (!doc) return res.status(404).json({ error: 'Not found' });
   if (doc.share_expires_at && new Date(doc.share_expires_at).getTime() <= Date.now()) {
@@ -926,12 +915,12 @@ app.get('/api/shared/:token', (req, res) => {
     SELECT t.id, t.name, t.color FROM tags t
     JOIN document_tags dt ON dt.tag_id = t.id WHERE dt.document_id = ?
   `).all(doc.id);
-  const { uploaded_by_name_snapshot, shared_by_name_snapshot, share_password_hash, shared_by_user_id, ...safeDoc } = doc;
+  const { uploaded_by_name_snapshot, share_password_hash, ...safeDoc } = doc;
   res.json({
     ...safeDoc,
     name: normalizeUploadedFilename(doc.name),
-    uploaded_by_name: doc.uploaded_by_name,
-    shared_by_name: doc.shared_by_name,
+    uploaded_by_name: doc.uploaded_by_name_snapshot || null,
+    shared_by_name: doc.uploaded_by_name_snapshot || null,
     starred: !!doc.starred,
     trashed: false,
     shared: true,
