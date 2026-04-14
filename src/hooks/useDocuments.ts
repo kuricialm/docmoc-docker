@@ -8,7 +8,6 @@ export type Document = {
   id: string;
   user_id: string;
   uploaded_by_name?: string;
-  shared_by_name?: string;
   name: string;
   file_type: string;
   file_size: number;
