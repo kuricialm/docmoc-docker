@@ -1,12 +1,10 @@
-# Welcome to your Lovable project
+# Docmoc
 
-TODO: Document your project here
-
-## Local / Lovable development
+## Local development
 
 - Run `npm run dev` to start Vite on `http://localhost:8080`.
-- In development, Vite now auto-starts `server.cjs` on port `3001` so auth and `/api/*` routes work in Lovable previews too.
-- `VITE_USE_EXTERNAL_BACKEND=true npm run dev` is only for local frontend development when some other backend is already running.
+- In development, Vite auto-starts `server.cjs` on port `3001` so auth and `/api/*` routes work with the local backend by default.
+- `VITE_USE_EXTERNAL_BACKEND=true npm run dev` is only for frontend-only development when another backend is already running.
 
 ## NAS / production run (recommended)
 
