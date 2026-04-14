@@ -161,6 +161,18 @@ function resolveDisplayName(...candidates) {
   return 'Unknown user';
 }
 
+function resolveDocumentUploaderName(doc) {
+  const owner = db.prepare('SELECT full_name, email FROM users WHERE id = ?').get(doc.user_id);
+  const resolved = resolveDisplayName(doc.uploaded_by_name_snapshot, owner?.full_name, owner?.email);
+
+  if ((!doc.uploaded_by_name_snapshot || !String(doc.uploaded_by_name_snapshot).trim()) && resolved !== 'Unknown user') {
+    db.prepare('UPDATE documents SET uploaded_by_name_snapshot = ? WHERE id = ?')
+      .run(resolved, doc.id);
+  }
+
+  return resolved;
+}
+
 function getWorkspaceLogoUrl() {
   const row = db.prepare("SELECT value FROM settings WHERE key='workspace_logo_url'").get();
   return row ? row.value : null;
@@ -550,7 +562,6 @@ app.get('/api/documents', auth, (req, res) => {
       ...rest,
       name: normalizeUploadedFilename(rest.name),
       uploaded_by_name: uploadedByName,
-      shared_by_name: uploadedByName,
       starred: !!d.starred,
       trashed: !!d.trashed,
       shared: !!d.shared,
@@ -581,7 +592,6 @@ app.post('/api/documents/upload', auth, upload.single('file'), (req, res) => {
     file_type: req.file.mimetype || 'application/octet-stream',
     file_size: req.file.size, storage_path: storagePath,
     starred: 0, trashed: 0, trashed_at: null, shared: 0, share_token: null,
-    shared_by_name: null,
     uploaded_by_name_snapshot: resolveDisplayName(req.user.full_name, req.user.email),
     created_at: now(), updated_at: now(),
   };
@@ -596,7 +606,6 @@ app.post('/api/documents/upload', auth, upload.single('file'), (req, res) => {
     ...doc,
     name: normalizeUploadedFilename(doc.name),
     uploaded_by_name: req.user.full_name || req.user.email || 'Unknown user',
-    shared_by_name: req.user.full_name || req.user.email || 'Unknown user',
     starred: false,
     trashed: false,
     shared: false,
@@ -703,10 +712,6 @@ app.patch('/api/documents/:id/share', auth, (req, res) => {
   }
 
   const shareToken = existing.share_token || uid();
-  const sharedByName = typeof req.user.full_name === 'string' ? req.user.full_name.trim() : '';
-  if (!sharedByName) {
-    return res.status(400).json({ error: 'Full name is required before sharing' });
-  }
   db.prepare(`
     UPDATE documents
     SET shared = 1,
@@ -723,11 +728,6 @@ app.patch('/api/documents/:id/share', auth, (req, res) => {
     req.params.id,
     req.user.id,
   );
-  const persistedShareName = db.prepare('SELECT shared_by_name FROM documents WHERE id = ? AND user_id = ?')
-    .get(req.params.id, req.user.id);
-  if (!persistedShareName?.shared_by_name || !String(persistedShareName.shared_by_name).trim()) {
-    return res.status(500).json({ error: 'Failed to persist sharer name' });
-  }
   logDocumentEvent(req.params.id, req.user.id, existing.share_token ? 'share_updated' : 'share_enabled', { expiresAt: shareExpiresAt });
   if (expiryChanged) {
     logDocumentEvent(req.params.id, req.user.id, 'share_expiry_changed', {
@@ -926,11 +926,11 @@ app.get('/api/shared/:token', (req, res) => {
     JOIN document_tags dt ON dt.tag_id = t.id WHERE dt.document_id = ?
   `).all(doc.id);
   const { uploaded_by_name_snapshot, share_password_hash, ...safeDoc } = doc;
+  const uploadedByName = resolveDocumentUploaderName(doc);
   res.json({
     ...safeDoc,
     name: normalizeUploadedFilename(doc.name),
-    uploaded_by_name: doc.uploaded_by_name_snapshot || null,
-    shared_by_name: doc.uploaded_by_name_snapshot || null,
+    uploaded_by_name: uploadedByName,
     starred: !!doc.starred,
     trashed: false,
     shared: true,
