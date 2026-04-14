@@ -282,12 +282,23 @@ app.use(express.json());
 app.use(cookieParser(COOKIE_SECRET));
 
 // Cookie helper — adapts to secure (HTTPS / proxy) contexts for iframe/preview compat
+function isSecureRequest(req) {
+  if (req.secure) return true;
+  const forwardedProto = req.get('x-forwarded-proto');
+  if (typeof forwardedProto === 'string') {
+    const firstProto = forwardedProto.split(',')[0]?.trim().toLowerCase();
+    if (firstProto === 'https') return true;
+  }
+  return false;
+}
+
 function sessionCookieOpts(req, maxAge) {
   const isSecure = COOKIE_SECURE_MODE === 'always'
     ? true
     : COOKIE_SECURE_MODE === 'never'
       ? false
-      : req.secure;
+      // Keep iframe/preview auth working behind TLS-terminating proxies.
+      : isSecureRequest(req);
   const opts = { httpOnly: true, path: '/' };
   if (isSecure) {
     opts.secure = true;
