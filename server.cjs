@@ -161,8 +161,8 @@ function resolveDisplayName(...candidates) {
   return 'Unknown user';
 }
 
-function resolveDocumentUploaderName(doc) {
-  const owner = db.prepare('SELECT full_name, email FROM users WHERE id = ?').get(doc.user_id);
+function resolveDocumentUploaderName(doc, ownerOverride = null) {
+  const owner = ownerOverride || db.prepare('SELECT full_name, email FROM users WHERE id = ?').get(doc.user_id);
   const resolved = resolveDisplayName(doc.uploaded_by_name_snapshot, owner?.full_name, owner?.email);
 
   if ((!doc.uploaded_by_name_snapshot || !String(doc.uploaded_by_name_snapshot).trim()) && resolved !== 'Unknown user') {
@@ -557,7 +557,7 @@ app.get('/api/documents', auth, (req, res) => {
   `);
   docs = docs.map(d => {
     const { share_password_hash, ...rest } = d;
-    const uploadedByName = rest.uploaded_by_name_snapshot || req.user.full_name || req.user.email || null;
+    const uploadedByName = resolveDocumentUploaderName(d, req.user);
     return ({
       ...rest,
       name: normalizeUploadedFilename(rest.name),
