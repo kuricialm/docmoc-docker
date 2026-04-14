@@ -212,14 +212,9 @@ export default function AdminPage() {
                     {u.role === 'admin' ? <Shield className="w-3 h-3" /> : <User className="w-3 h-3" />}
                     {u.role}
                   </span>
-                  {u.suspended && (
-                    <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-600">
-                      Suspended
-                    </span>
-                  )}
                   <div className="flex items-center gap-2">
                     <Button
-                      variant={u.suspended ? 'secondary' : 'outline'}
+                      variant={u.suspended ? 'destructive' : 'outline'}
                       size="sm"
                       onClick={() => handleSuspendToggle(u)}
                       className="text-xs rounded-lg"
@@ -256,15 +251,10 @@ export default function AdminPage() {
                         {u.role === 'admin' ? <Shield className="w-3 h-3" /> : <User className="w-3 h-3" />}
                         {u.role}
                       </span>
-                      {u.suspended && (
-                        <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-600">
-                          Suspended
-                        </span>
-                      )}
                     </div>
                     <div className="flex items-center gap-2">
                       <Button
-                        variant={u.suspended ? 'secondary' : 'outline'}
+                        variant={u.suspended ? 'destructive' : 'outline'}
                         size="sm"
                         onClick={() => handleSuspendToggle(u)}
                         className="text-xs rounded-lg"
