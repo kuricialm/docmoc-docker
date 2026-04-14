@@ -1,8 +1,7 @@
-version: "3.8"
-
 services:
   docmoc:
-    build: .
+    image: ${DOCMOC_IMAGE:-egsa/docmoc-docker:latest}
+    pull_policy: always
     ports:
       - "3000:3001"
     volumes:

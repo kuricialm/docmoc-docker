@@ -11,10 +11,21 @@
 For NAS, do **not** use `npm run dev`. Run the production container instead:
 
 ```bash
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 ```
 
 This serves the built frontend and the Express API together from `server.cjs` on container port `3001` (mapped to host `3000` by default in `docker-compose.yml`).
+
+### Image tag pinning (recommended for controlled updates)
+
+You can pin a specific image tag and then upgrade intentionally:
+
+```bash
+DOCMOC_IMAGE=egsa/docmoc-docker:1.0.3 docker compose up -d
+```
+
+When you publish a newer tag, update `DOCMOC_IMAGE` (or use `latest`), run `docker compose pull`, then restart.
 
 ## External backend dev proxy example
 
