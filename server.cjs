@@ -86,6 +86,21 @@ ensureDocumentColumn('share_expires_at', 'share_expires_at TEXT');
 ensureDocumentColumn('share_password_hash', 'share_password_hash TEXT');
 ensureDocumentColumn('shared_by_name', 'shared_by_name TEXT');
 ensureDocumentColumn('uploaded_by_name_snapshot', 'uploaded_by_name_snapshot TEXT');
+db.exec(`
+  UPDATE users
+  SET full_name = email
+  WHERE full_name IS NULL OR TRIM(full_name) = ''
+`);
+db.exec(`
+  UPDATE documents
+  SET shared_by_name = (
+    SELECT u.full_name
+    FROM users u
+    WHERE u.id = documents.user_id
+  )
+  WHERE shared = 1
+    AND (shared_by_name IS NULL OR TRIM(shared_by_name) = '')
+`);
 
 // Seed admin
 const userCount = db.prepare('SELECT COUNT(*) as c FROM users').get().c;
