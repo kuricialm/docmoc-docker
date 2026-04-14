@@ -93,11 +93,16 @@ function getResponseErrorMessage(res: Response, body: any): string {
 }
 
 async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...(opts?.headers || {}) },
-    ...opts,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...(opts?.headers || {}) },
+      ...opts,
+    });
+  } catch {
+    throw new Error('Cannot connect to backend. Is the server running?');
+  }
   const body = await readJsonBody(res);
   if (!res.ok) {
     throw new Error(getResponseErrorMessage(res, body));
@@ -349,10 +354,16 @@ export async function getDocumentBlob(docId: string): Promise<Blob | undefined> 
 
 export async function getSharedDocument(token: string, password?: string): Promise<(DocRecord & { tags: TagRecord[] }) | null> {
   const suffix = password ? `?password=${encodeURIComponent(password)}` : '';
-  const res = await fetch(`${BASE}/shared/${token}${suffix}`, { credentials: 'include' });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}/shared/${token}${suffix}`, { credentials: 'include' });
+  } catch {
+    throw new Error('Cannot connect to backend. Is the server running?');
+  }
   if (res.status === 401) throw new Error('PASSWORD_REQUIRED');
   if (!res.ok) return null;
-  return res.json();
+  const body = await readJsonBody(res);
+  return body as (DocRecord & { tags: TagRecord[] }) | null;
 }
 
 export async function getSharedDocumentBlob(token: string, password?: string): Promise<Blob | undefined> {
