@@ -13,6 +13,10 @@ function isPreviewable(fileType: string) {
   return IMAGE_TYPES.includes(fileType) || fileType === PDF_TYPE;
 }
 
+function clamp(min: number, value: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
+
 type Props = {
   docId: string;
   fileType: string;
@@ -97,21 +101,29 @@ export default memo(function DocumentThumbnail({ docId, fileType, enabled }: Pro
   }
 
   if (src) {
-    const ratio = sourceAspectRatio ?? 1;
     const isPdf = fileType === PDF_TYPE;
+    const ratio = sourceAspectRatio ?? (isPdf ? 0.75 : 1.4);
 
-    // Keep framing stable while still adapting to source shape.
-    const frameAspectRatio = isPdf
-      ? Math.min(Math.max(ratio, 0.72), 1.18)
-      : Math.min(Math.max(ratio, 0.9), 1.85);
-    const objectPosition = isPdf ? 'center 20%' : ratio > 1.8 ? 'center 45%' : 'center center';
+    // Match reference behavior:
+    // - Large framed tile
+    // - Top-anchored
+    // - Natural media ratio (no stretch)
+    // - Cropping happens by viewport clipping, not distortion
+    const frameWidth = clamp(56, 66 + (ratio - 1) * 18, 82);
+    const objectPosition = isPdf
+      ? 'center top'
+      : ratio > 1.8
+        ? 'center 40%'
+        : ratio < 0.8
+          ? 'center 32%'
+          : 'center center';
 
     return (
-      <div className="w-full h-full p-[clamp(10px,2.6vw,16px)]">
-        <div className="w-full h-full grid place-items-center">
+      <div className="w-full h-full px-[clamp(10px,2.6vw,16px)] pt-[clamp(12px,3vw,20px)] overflow-hidden">
+        <div className="w-full h-full flex items-start justify-center overflow-hidden">
           <div
-            className="relative h-full max-w-full overflow-hidden rounded-lg border border-border/40 bg-background/70 shadow-sm"
-            style={{ aspectRatio: frameAspectRatio }}
+            className="relative overflow-hidden rounded-lg border border-border/40 bg-background shadow-md"
+            style={{ width: `${frameWidth}%`, aspectRatio: ratio }}
           >
             <img
               src={src}
