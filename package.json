@@ -1,5 +1,5 @@
 {
-  "name": "vite_react_shadcn_ts",
+  "name": "docmoc",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -11,9 +11,9 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "docker:dev": "docker buildx build --platform linux/arm64 -t docmoc-local --load .",
-    "docker:release": "docker buildx build --platform linux/amd64,linux/arm64 -t egsa/docmoc-docker:latest --push --cache-from=type=registry,ref=egsa/docmoc-docker:buildcache --cache-to=type=registry,ref=egsa/docmoc-docker:buildcache,mode=max .",
-    "docker:up:local": "DOCMOC_IMAGE=docmoc-local docker compose up -d --force-recreate --pull never"
+    "docker:dev": "docker buildx build --platform linux/arm64 -t egsa/docmoc:local --load .",
+    "docker:release": "docker buildx build --platform linux/amd64,linux/arm64 -t egsa/docmoc:latest --push --cache-from=type=registry,ref=egsa/docmoc:buildcache --cache-to=type=registry,ref=egsa/docmoc:buildcache,mode=max .",
+    "docker:up:local": "DOCMOC_IMAGE=egsa/docmoc:local docker compose up -d --force-recreate --pull never"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

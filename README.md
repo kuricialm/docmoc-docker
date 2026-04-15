@@ -22,7 +22,7 @@ This serves the built frontend and the Express API together from `server.cjs` on
 You can pin a specific image tag and then upgrade intentionally:
 
 ```bash
-DOCMOC_IMAGE=egsa/docmoc-docker:1.0.3 docker compose up -d
+DOCMOC_IMAGE=egsa/docmoc:1.0.3 docker compose up -d
 ```
 
 When you publish a newer tag, update `DOCMOC_IMAGE` (or use `latest`), run `docker compose pull`, then restart.
