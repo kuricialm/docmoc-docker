@@ -20,6 +20,7 @@ COPY package.json package-lock.json ./
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY server.cjs ./
+COPY server ./server
 RUN mkdir -p /app/data
 EXPOSE 3001
 ENV DATA_DIR=/app/data

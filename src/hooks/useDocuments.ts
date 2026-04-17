@@ -74,9 +74,12 @@ export function useDocumentMutations() {
   const uploadDocument = useMutation({
     mutationFn: async (file: File) => {
       if (!user) throw new Error('Not authenticated');
-      await api.uploadDocument(user.id, file);
+      return api.uploadDocument(user.id, file);
     },
-    onSuccess: () => { invalidate(); toast.success('Document uploaded'); },
+    onSuccess: (document) => {
+      invalidate();
+      toast.success(document?.summary_auto_started ? 'Document uploaded. Summary generation started.' : 'Document uploaded');
+    },
     onError: (e: Error) => toast.error(e.message),
   });
 

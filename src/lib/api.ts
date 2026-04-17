@@ -67,6 +67,90 @@ export type AppSettings = {
   workspace_favicon_url?: string | null;
 };
 
+export type OpenRouterModelOption = {
+  id: string;
+  name: string;
+  description: string;
+  context_length: number;
+  input_modalities: string[];
+  output_modalities: string[];
+  prompt_price: number | null;
+  completion_price: number | null;
+  request_price: number | null;
+  image_price: number | null;
+  max_completion_tokens: number;
+};
+
+export type OpenRouterSettings = {
+  provider: 'openrouter';
+  configured: boolean;
+  credential: {
+    key_label: string | null;
+    last4: string | null;
+    masked_key: string | null;
+    validated_at: string | null;
+    expires_at: string | null;
+    status: string;
+    last_error: string | null;
+    last_model_sync_at: string | null;
+  } | null;
+  preferences: {
+    text_model_id: string | null;
+    vision_model_id: string | null;
+    summary_prompt: string;
+    summary_prompt_default: string;
+    text_model_valid: boolean;
+    vision_model_valid: boolean;
+  };
+  models: {
+    text: OpenRouterModelOption[];
+    vision: OpenRouterModelOption[];
+    fetched_at: string | null;
+  };
+  summary_backfill?: {
+    missing_count: number;
+    regeneratable_count?: number;
+    queue_size: number;
+    auto_generate_on_upload: boolean;
+    batches?: {
+      missing: {
+        active: boolean;
+        total: number;
+        completed: number;
+        failed: number;
+        pending: number;
+        progress_percent: number;
+        started_at: string | null;
+        finished_at: string | null;
+      } | null;
+      regenerate: {
+        active: boolean;
+        total: number;
+        completed: number;
+        failed: number;
+        pending: number;
+        progress_percent: number;
+        started_at: string | null;
+        finished_at: string | null;
+      } | null;
+    };
+  };
+};
+
+export type DocumentSummaryState = {
+  provider: string;
+  format: 'brief';
+  mode: 'text' | 'vision' | 'unsupported';
+  state: 'no_key' | 'model_missing' | 'missing' | 'pending' | 'ready' | 'failed' | 'unsupported';
+  can_generate: boolean;
+  message: string | null;
+  coverage: 'full' | 'truncated' | null;
+  model: string | null;
+  generated_at: string | null;
+  summary: string | null;
+  openRouter: OpenRouterSettings;
+};
+
 // ---------- Fetch helper ----------
 const RAW_API_BASE = import.meta.env.VITE_API_BASE_URL?.trim();
 const BASE = RAW_API_BASE
@@ -289,6 +373,59 @@ export async function updateSettings(s: Partial<AppSettings>): Promise<void> {
   });
 }
 
+// ---------- AI / OpenRouter ----------
+export async function getOpenRouterSettings(): Promise<OpenRouterSettings> {
+  return apiFetch('/profile/ai/openrouter');
+}
+
+export async function saveOpenRouterKey(apiKey: string): Promise<OpenRouterSettings> {
+  return apiFetch('/profile/ai/openrouter-key', {
+    method: 'POST',
+    body: JSON.stringify({ apiKey }),
+  });
+}
+
+export async function removeOpenRouterKey(): Promise<void> {
+  await apiFetch('/profile/ai/openrouter-key', {
+    method: 'DELETE',
+  });
+}
+
+export async function saveOpenRouterPreferences(data: {
+  textModelId?: string | null;
+  visionModelId?: string | null;
+  summaryPrompt?: string | null;
+}): Promise<OpenRouterSettings> {
+  return apiFetch('/profile/ai/openrouter/preferences', {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function refreshOpenRouterModels(): Promise<OpenRouterSettings> {
+  return apiFetch('/profile/ai/openrouter/models/refresh', {
+    method: 'POST',
+  });
+}
+
+export async function queueMissingOpenRouterSummaries(): Promise<{
+  queued: number;
+  settings: OpenRouterSettings;
+}> {
+  return apiFetch('/profile/ai/openrouter/backfill', {
+    method: 'POST',
+  });
+}
+
+export async function regenerateAllOpenRouterSummaries(): Promise<{
+  queued: number;
+  settings: OpenRouterSettings;
+}> {
+  return apiFetch('/profile/ai/openrouter/regenerate-all', {
+    method: 'POST',
+  });
+}
+
 // ---------- Documents ----------
 export type DocFilter = {
   trashed?: boolean;
@@ -318,10 +455,10 @@ async function uploadFile(path: string, file: File, fallbackErrorMessage: string
   return body;
 }
 
-export async function uploadDocument(_userId: string, file: File): Promise<DocRecord & { tags: TagRecord[] }> {
+export async function uploadDocument(_userId: string, file: File): Promise<DocRecord & { tags: TagRecord[]; summary_auto_started?: boolean }> {
   const body = await uploadFile('/documents/upload', file, 'Upload failed');
   if (!body) throw new Error('Upload failed: empty response from API');
-  return body as DocRecord & { tags: TagRecord[] };
+  return body as DocRecord & { tags: TagRecord[]; summary_auto_started?: boolean };
 }
 
 export async function getDocuments(_userId: string, filter?: DocFilter): Promise<(DocRecord & { tags: TagRecord[] })[]> {
@@ -437,6 +574,17 @@ export async function getSharedDocumentBlob(token: string, password?: string): P
 export async function getDocumentHistory(documentId: string): Promise<DocumentHistoryRecord[]> {
   const rows = await apiFetch<DocumentHistoryRecord[]>(`/documents/${documentId}/history`);
   return [...rows].sort((a, b) => b.created_at.localeCompare(a.created_at));
+}
+
+export async function getDocumentSummary(documentId: string): Promise<DocumentSummaryState> {
+  return apiFetch(`/documents/${documentId}/summary`);
+}
+
+export async function generateDocumentSummary(documentId: string, force = false): Promise<DocumentSummaryState> {
+  return apiFetch(`/documents/${documentId}/summary`, {
+    method: 'POST',
+    body: JSON.stringify({ force }),
+  });
 }
 
 // ---------- Tags ----------

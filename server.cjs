@@ -6,6 +6,9 @@ const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
+const { decryptSecret, encryptSecret, getApiKeyLast4 } = require('./server/lib/aiSecrets.cjs');
+const { getAiProvider } = require('./server/services/ai/index.cjs');
+const { DEFAULT_SUMMARY_PROMPT, summarizeDocument } = require('./server/services/summary/index.cjs');
 
 // ── Config ──
 const PORT = parseInt(process.env.PORT || '3001', 10);
@@ -17,6 +20,10 @@ const TRASH_RETENTION_DAYS = parseInt(process.env.TRASH_RETENTION_DAYS || '30', 
 const COOKIE_SECRET = process.env.COOKIE_SECRET || 'docmoc-secret-change-me';
 const COOKIE_DOMAIN = process.env.COOKIE_DOMAIN || undefined;
 const COOKIE_SECURE_MODE = process.env.COOKIE_SECURE_MODE || 'auto'; // auto | always | never
+const AI_PROVIDER_OPENROUTER = 'openrouter';
+const SUMMARY_FORMAT_BRIEF = 'brief';
+const SUMMARY_CACHE_VERSION = 'summary-text-v1';
+const MAX_CONCURRENT_SUMMARIES_PER_USER = parseInt(process.env.MAX_CONCURRENT_SUMMARIES_PER_USER || '2', 10);
 
 fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
@@ -71,8 +78,65 @@ db.exec(`
     FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
   );
   CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);
+  CREATE TABLE IF NOT EXISTS user_ai_credentials (
+    user_id TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    encrypted_key TEXT NOT NULL,
+    key_label TEXT,
+    last4 TEXT,
+    validated_at TEXT,
+    expires_at TEXT,
+    status TEXT,
+    last_error TEXT,
+    last_model_sync_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY(user_id, provider),
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+  CREATE TABLE IF NOT EXISTS user_ai_preferences (
+    user_id TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    text_model_id TEXT,
+    vision_model_id TEXT,
+    summary_prompt TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY(user_id, provider),
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+  CREATE TABLE IF NOT EXISTS user_ai_model_catalog (
+    user_id TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    models_json TEXT NOT NULL,
+    fetched_at TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY(user_id, provider),
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+  CREATE TABLE IF NOT EXISTS document_summaries (
+    document_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    summary_format TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    model TEXT,
+    status TEXT NOT NULL,
+    source_fingerprint TEXT NOT NULL,
+    coverage TEXT,
+    content_json TEXT,
+    error_message TEXT,
+    generated_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY(document_id, user_id, summary_format),
+    FOREIGN KEY(document_id) REFERENCES documents(id) ON DELETE CASCADE,
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
   CREATE INDEX IF NOT EXISTS idx_document_history_document_created
     ON document_history (document_id, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_document_summaries_document_updated
+    ON document_summaries (document_id, updated_at DESC);
 `);
 
 function ensureUserColumn(columnName, sqlDefinition) {
@@ -96,6 +160,15 @@ function ensureDocumentColumn(columnName, sqlDefinition) {
 ensureDocumentColumn('share_expires_at', 'share_expires_at TEXT');
 ensureDocumentColumn('share_password_hash', 'share_password_hash TEXT');
 ensureDocumentColumn('uploaded_by_name_snapshot', 'uploaded_by_name_snapshot TEXT');
+
+function ensureUserAiPreferencesColumn(columnName, sqlDefinition) {
+  const cols = db.prepare('PRAGMA table_info(user_ai_preferences)').all();
+  if (!cols.some((c) => c.name === columnName)) {
+    db.exec(`ALTER TABLE user_ai_preferences ADD COLUMN ${sqlDefinition}`);
+  }
+}
+
+ensureUserAiPreferencesColumn('summary_prompt', 'summary_prompt TEXT');
 db.exec(`
   UPDATE users
   SET full_name = email
@@ -221,6 +294,643 @@ function formatBytes(bytes) {
   return `${rounded} ${units[idx]}`;
 }
 
+function parseJsonValue(value, fallbackValue) {
+  if (typeof value !== 'string' || !value.trim()) return fallbackValue;
+  try {
+    return JSON.parse(value);
+  } catch (_) {
+    return fallbackValue;
+  }
+}
+
+function getDocumentSourceFingerprint(doc) {
+  return [
+    doc.file_type || 'unknown',
+    String(doc.file_size || 0),
+    doc.storage_path || 'missing',
+  ].join(':');
+}
+
+function getDocumentSummaryFingerprintBase(doc, openRouter = null) {
+  return [
+    SUMMARY_CACHE_VERSION,
+    getDocumentSourceFingerprint(doc),
+  ].join(':');
+}
+
+function getDocumentSummaryFingerprint(doc, openRouter = null) {
+  return getDocumentSummaryFingerprintBase(doc, openRouter);
+}
+
+function doesStoredSummaryFingerprintMatch(storedFingerprint, doc, openRouter = null) {
+  if (typeof storedFingerprint !== 'string' || !storedFingerprint.trim()) return false;
+
+  const currentFingerprint = getDocumentSummaryFingerprint(doc, openRouter);
+  if (storedFingerprint === currentFingerprint) {
+    return true;
+  }
+
+  // Backward compatibility: older builds appended a prompt hash suffix.
+  return storedFingerprint.startsWith(`${currentFingerprint}:`);
+}
+
+function normalizeStoredSummaryContent(value) {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed || null;
+  }
+
+  if (value && typeof value === 'object') {
+    const parts = [];
+    if (typeof value.overview === 'string' && value.overview.trim()) {
+      parts.push(value.overview.trim());
+    }
+
+    if (Array.isArray(value.key_takeaways)) {
+      const items = value.key_takeaways
+        .map((item) => String(item).trim())
+        .filter(Boolean)
+        .map((item) => `- ${item}`);
+      if (items.length > 0) {
+        parts.push(items.join('\n'));
+      }
+    }
+
+    const combined = parts.join('\n\n').trim();
+    return combined || null;
+  }
+
+  return null;
+}
+
+function getOpenRouterCredential(userId) {
+  return db.prepare(`
+    SELECT user_id, provider, encrypted_key, key_label, last4, validated_at, expires_at, status, last_error, last_model_sync_at
+    FROM user_ai_credentials
+    WHERE user_id = ? AND provider = ?
+  `).get(userId, AI_PROVIDER_OPENROUTER);
+}
+
+function getOpenRouterPreferences(userId) {
+  return db.prepare(`
+    SELECT user_id, provider, text_model_id, vision_model_id, summary_prompt, created_at, updated_at
+    FROM user_ai_preferences
+    WHERE user_id = ? AND provider = ?
+  `).get(userId, AI_PROVIDER_OPENROUTER);
+}
+
+function getOpenRouterModelCatalog(userId) {
+  const row = db.prepare(`
+    SELECT models_json, fetched_at
+    FROM user_ai_model_catalog
+    WHERE user_id = ? AND provider = ?
+  `).get(userId, AI_PROVIDER_OPENROUTER);
+
+  if (!row) return { text: [], vision: [], fetched_at: null };
+  const parsed = parseJsonValue(row.models_json, { text: [], vision: [] });
+  return {
+    text: Array.isArray(parsed?.text) ? parsed.text : [],
+    vision: Array.isArray(parsed?.vision) ? parsed.vision : [],
+    fetched_at: row.fetched_at || null,
+  };
+}
+
+function upsertOpenRouterCredential(userId, values) {
+  const timestamp = now();
+  db.prepare(`
+    INSERT INTO user_ai_credentials (
+      user_id, provider, encrypted_key, key_label, last4, validated_at, expires_at, status, last_error, last_model_sync_at, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(user_id, provider) DO UPDATE SET
+      encrypted_key = excluded.encrypted_key,
+      key_label = excluded.key_label,
+      last4 = excluded.last4,
+      validated_at = excluded.validated_at,
+      expires_at = excluded.expires_at,
+      status = excluded.status,
+      last_error = excluded.last_error,
+      last_model_sync_at = excluded.last_model_sync_at,
+      updated_at = excluded.updated_at
+  `).run(
+    userId,
+    AI_PROVIDER_OPENROUTER,
+    values.encrypted_key,
+    values.key_label || null,
+    values.last4 || null,
+    values.validated_at || null,
+    values.expires_at || null,
+    values.status || 'valid',
+    values.last_error || null,
+    values.last_model_sync_at || null,
+    timestamp,
+    timestamp,
+  );
+}
+
+function upsertOpenRouterPreferences(userId, values) {
+  const existing = getOpenRouterPreferences(userId);
+  const timestamp = now();
+  db.prepare(`
+    INSERT INTO user_ai_preferences (
+      user_id, provider, text_model_id, vision_model_id, summary_prompt, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(user_id, provider) DO UPDATE SET
+      text_model_id = excluded.text_model_id,
+      vision_model_id = excluded.vision_model_id,
+      summary_prompt = excluded.summary_prompt,
+      updated_at = excluded.updated_at
+  `).run(
+    userId,
+    AI_PROVIDER_OPENROUTER,
+    values.text_model_id !== undefined ? values.text_model_id : existing?.text_model_id || null,
+    values.vision_model_id !== undefined ? values.vision_model_id : existing?.vision_model_id || null,
+    values.summary_prompt !== undefined ? values.summary_prompt : existing?.summary_prompt || null,
+    existing?.created_at || timestamp,
+    timestamp,
+  );
+}
+
+function upsertOpenRouterModelCatalog(userId, catalog) {
+  const timestamp = now();
+  db.prepare(`
+    INSERT INTO user_ai_model_catalog (
+      user_id, provider, models_json, fetched_at, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(user_id, provider) DO UPDATE SET
+      models_json = excluded.models_json,
+      fetched_at = excluded.fetched_at,
+      updated_at = excluded.updated_at
+  `).run(
+    userId,
+    AI_PROVIDER_OPENROUTER,
+    JSON.stringify({
+      text: Array.isArray(catalog?.text) ? catalog.text : [],
+      vision: Array.isArray(catalog?.vision) ? catalog.vision : [],
+    }),
+    timestamp,
+    timestamp,
+    timestamp,
+  );
+}
+
+function deleteOpenRouterSetup(userId) {
+  db.prepare('DELETE FROM user_ai_credentials WHERE user_id = ? AND provider = ?').run(userId, AI_PROVIDER_OPENROUTER);
+  db.prepare('DELETE FROM user_ai_preferences WHERE user_id = ? AND provider = ?').run(userId, AI_PROVIDER_OPENROUTER);
+  db.prepare('DELETE FROM user_ai_model_catalog WHERE user_id = ? AND provider = ?').run(userId, AI_PROVIDER_OPENROUTER);
+}
+
+function findModelById(catalog, modelId) {
+  if (!modelId) return null;
+  return (
+    catalog.text.find((model) => model.id === modelId)
+    || catalog.vision.find((model) => model.id === modelId)
+    || null
+  );
+}
+
+function getSummaryRequestKey(userId, documentId) {
+  return `${userId}:${documentId}:${SUMMARY_FORMAT_BRIEF}`;
+}
+
+function listSummaryCandidateDocuments(userId) {
+  return db.prepare(`
+    SELECT *
+    FROM documents
+    WHERE user_id = ? AND trashed = 0
+    ORDER BY created_at DESC
+  `).all(userId);
+}
+
+function buildOpenRouterResponse(userId, options = {}) {
+  const { includeSummaryBackfill = true } = options;
+  const credential = getOpenRouterCredential(userId);
+  const preferences = getOpenRouterPreferences(userId);
+  const catalog = getOpenRouterModelCatalog(userId);
+
+  const textModelId = preferences?.text_model_id || null;
+  const visionModelId = preferences?.vision_model_id || null;
+  const textModelValid = !textModelId ? false : !!catalog.text.find((model) => model.id === textModelId);
+  const visionModelValid = !visionModelId ? false : !!catalog.vision.find((model) => model.id === visionModelId);
+
+  const response = {
+    provider: AI_PROVIDER_OPENROUTER,
+    configured: !!credential,
+    credential: credential ? {
+      key_label: credential.key_label || null,
+      last4: credential.last4 || null,
+      masked_key: credential.last4 ? `••••${credential.last4}` : null,
+      validated_at: credential.validated_at || null,
+      expires_at: credential.expires_at || null,
+      status: credential.status || 'valid',
+      last_error: credential.last_error || null,
+      last_model_sync_at: credential.last_model_sync_at || null,
+    } : null,
+    preferences: {
+      text_model_id: textModelId,
+      vision_model_id: visionModelId,
+      summary_prompt: preferences?.summary_prompt || DEFAULT_SUMMARY_PROMPT,
+      summary_prompt_default: DEFAULT_SUMMARY_PROMPT,
+      text_model_valid: textModelValid,
+      vision_model_valid: visionModelValid,
+    },
+    models: {
+      text: catalog.text,
+      vision: catalog.vision,
+      fetched_at: catalog.fetched_at,
+    },
+  };
+
+  if (includeSummaryBackfill) {
+    response.summary_backfill = getOpenRouterSummaryBackfill(userId, response);
+  }
+
+  return response;
+}
+
+function buildSummarySupportState(doc, userId, openRouter = null) {
+  const resolvedOpenRouter = openRouter || buildOpenRouterResponse(userId, { includeSummaryBackfill: false });
+
+  if (doc.file_type === 'application/zip') {
+    return {
+      mode: 'unsupported',
+      state: 'unsupported',
+      can_generate: false,
+      message: 'ZIP archives are not supported for summaries yet.',
+      openRouter: resolvedOpenRouter,
+    };
+  }
+
+  const isImage = typeof doc.file_type === 'string' && doc.file_type.startsWith('image/');
+  const mode = isImage ? 'vision' : 'text';
+
+  if (!resolvedOpenRouter.configured) {
+    return {
+      mode,
+      state: 'no_key',
+      can_generate: false,
+      message: 'Add and validate your OpenRouter key in Settings to enable summaries.',
+      openRouter: resolvedOpenRouter,
+    };
+  }
+
+  if (resolvedOpenRouter.credential?.status && resolvedOpenRouter.credential.status !== 'valid') {
+    return {
+      mode,
+      state: 'no_key',
+      can_generate: false,
+      message: resolvedOpenRouter.credential.last_error || 'Revalidate your OpenRouter key in Settings before generating summaries.',
+      openRouter: resolvedOpenRouter,
+    };
+  }
+
+  if (mode === 'text') {
+    if (!resolvedOpenRouter.preferences.text_model_id) {
+      return {
+        mode,
+        state: 'model_missing',
+        can_generate: false,
+        message: 'Choose a text summary model in Settings before summarizing this document.',
+        openRouter: resolvedOpenRouter,
+      };
+    }
+    if (!resolvedOpenRouter.preferences.text_model_valid) {
+      return {
+        mode,
+        state: 'model_missing',
+        can_generate: false,
+        message: 'Your saved text summary model is no longer available. Choose a new one in Settings.',
+        openRouter: resolvedOpenRouter,
+      };
+    }
+  }
+
+  if (mode === 'vision') {
+    if (!resolvedOpenRouter.preferences.vision_model_id) {
+      return {
+        mode,
+        state: 'model_missing',
+        can_generate: false,
+        message: 'Choose a vision summary model in Settings before summarizing image documents.',
+        openRouter: resolvedOpenRouter,
+      };
+    }
+    if (!resolvedOpenRouter.preferences.vision_model_valid) {
+      return {
+        mode,
+        state: 'model_missing',
+        can_generate: false,
+        message: 'Your saved vision summary model is no longer available. Choose a new one in Settings.',
+        openRouter: resolvedOpenRouter,
+      };
+    }
+  }
+
+  return {
+    mode,
+    state: 'missing',
+    can_generate: true,
+    message: null,
+    openRouter: resolvedOpenRouter,
+  };
+}
+
+function getStoredDocumentSummary(documentId, userId) {
+  return db.prepare(`
+    SELECT document_id, user_id, summary_format, provider, model, status, source_fingerprint, coverage, content_json, error_message, generated_at, updated_at
+    FROM document_summaries
+    WHERE document_id = ? AND user_id = ? AND summary_format = ?
+  `).get(documentId, userId, SUMMARY_FORMAT_BRIEF);
+}
+
+function isSummaryQueuedOrInflight(userId, documentId) {
+  const requestKey = getSummaryRequestKey(userId, documentId);
+  return queuedSummaryRequests.has(requestKey) || inflightSummaryRequests.has(requestKey);
+}
+
+function buildDocumentSummaryResponse(doc, userId, openRouter = null) {
+  const baseState = buildSummarySupportState(doc, userId, openRouter);
+  const fingerprint = getDocumentSummaryFingerprint(doc, baseState.openRouter);
+  const stored = getStoredDocumentSummary(doc.id, userId);
+  const storedSummaryContent = normalizeStoredSummaryContent(parseJsonValue(stored?.content_json, null));
+  const canUseStoredWithoutKey = baseState.state === 'no_key' && stored?.status === 'completed' && !!storedSummaryContent;
+  const storedMatchesCurrentSettings = !!stored && doesStoredSummaryFingerprintMatch(stored.source_fingerprint, doc, baseState.openRouter);
+
+  if (isSummaryQueuedOrInflight(userId, doc.id) && (!stored || stored.status !== 'completed' || !storedMatchesCurrentSettings)) {
+    return {
+      ...baseState,
+      state: 'pending',
+      can_generate: false,
+      provider: AI_PROVIDER_OPENROUTER,
+      format: SUMMARY_FORMAT_BRIEF,
+      summary: null,
+      coverage: null,
+      model: stored?.model || null,
+      generated_at: stored?.generated_at || null,
+      message: 'Generating summary automatically...',
+    };
+  }
+
+  if (!stored || (!storedMatchesCurrentSettings && !canUseStoredWithoutKey)) {
+    return {
+      ...baseState,
+      provider: AI_PROVIDER_OPENROUTER,
+      format: SUMMARY_FORMAT_BRIEF,
+      summary: null,
+      coverage: null,
+      model: null,
+      generated_at: null,
+    };
+  }
+
+  if (stored.status === 'completed') {
+    if (!storedSummaryContent) {
+      return {
+        ...baseState,
+        provider: AI_PROVIDER_OPENROUTER,
+        format: SUMMARY_FORMAT_BRIEF,
+        summary: null,
+        coverage: null,
+        model: null,
+        generated_at: null,
+      };
+    }
+
+    return {
+      ...baseState,
+      state: 'ready',
+      can_generate: true,
+      provider: stored.provider,
+      format: SUMMARY_FORMAT_BRIEF,
+      summary: storedSummaryContent,
+      coverage: stored.coverage || null,
+      model: stored.model || null,
+      generated_at: stored.generated_at || null,
+      message: null,
+    };
+  }
+
+  if (stored.status === 'failed') {
+    return {
+      ...baseState,
+      state: 'failed',
+      can_generate: true,
+      provider: stored.provider,
+      format: SUMMARY_FORMAT_BRIEF,
+      summary: null,
+      coverage: null,
+      model: stored.model || null,
+      generated_at: stored.generated_at || null,
+      message: stored.error_message || 'Summary generation failed.',
+    };
+  }
+
+  if (stored.status === 'unsupported') {
+    return {
+      ...baseState,
+      state: 'unsupported',
+      can_generate: false,
+      provider: stored.provider || AI_PROVIDER_OPENROUTER,
+      format: SUMMARY_FORMAT_BRIEF,
+      summary: null,
+      coverage: null,
+      model: null,
+      generated_at: stored.generated_at || null,
+      message: stored.error_message || 'This document cannot be summarized yet.',
+    };
+  }
+
+  return {
+    ...baseState,
+    provider: AI_PROVIDER_OPENROUTER,
+    format: SUMMARY_FORMAT_BRIEF,
+    summary: null,
+    coverage: null,
+    model: stored.model || null,
+    generated_at: stored.generated_at || null,
+  };
+}
+
+function upsertDocumentSummary(documentId, userId, values) {
+  const existing = getStoredDocumentSummary(documentId, userId);
+  const timestamp = now();
+  db.prepare(`
+    INSERT INTO document_summaries (
+      document_id, user_id, summary_format, provider, model, status, source_fingerprint, coverage, content_json, error_message, generated_at, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(document_id, user_id, summary_format) DO UPDATE SET
+      provider = excluded.provider,
+      model = excluded.model,
+      status = excluded.status,
+      source_fingerprint = excluded.source_fingerprint,
+      coverage = excluded.coverage,
+      content_json = excluded.content_json,
+      error_message = excluded.error_message,
+      generated_at = excluded.generated_at,
+      updated_at = excluded.updated_at
+  `).run(
+    documentId,
+    userId,
+    SUMMARY_FORMAT_BRIEF,
+    values.provider || AI_PROVIDER_OPENROUTER,
+    values.model || null,
+    values.status,
+    values.source_fingerprint,
+    values.coverage || null,
+    values.content_json || null,
+    values.error_message || null,
+    values.generated_at || null,
+    existing?.created_at || timestamp,
+    timestamp,
+  );
+}
+
+const inflightSummaryRequests = new Map();
+const summaryConcurrencyByUser = new Map();
+const queuedSummaryRequests = new Set();
+const summaryGenerationQueue = [];
+const summaryBatchProgressByUser = new Map();
+let summaryQueueRunning = false;
+
+function getSummaryBatchState(userId) {
+  const existing = summaryBatchProgressByUser.get(userId);
+  if (existing) return existing;
+
+  const initial = {
+    missing: null,
+    regenerate: null,
+  };
+  summaryBatchProgressByUser.set(userId, initial);
+  return initial;
+}
+
+function startSummaryBatch(userId, type, total) {
+  const state = getSummaryBatchState(userId);
+  state[type] = {
+    active: total > 0,
+    total,
+    completed: 0,
+    failed: 0,
+    started_at: now(),
+    finished_at: null,
+  };
+}
+
+function markSummaryBatchProgress(userId, type, status) {
+  if (!type) return;
+
+  const state = getSummaryBatchState(userId);
+  const batch = state[type];
+  if (!batch) return;
+
+  if (status === 'failed') {
+    batch.failed += 1;
+  } else {
+    batch.completed += 1;
+  }
+
+  const finishedCount = batch.completed + batch.failed;
+  if (finishedCount >= batch.total) {
+    batch.active = false;
+    batch.finished_at = now();
+  }
+}
+
+function serializeSummaryBatch(batch) {
+  if (!batch) return null;
+  const pending = Math.max(batch.total - batch.completed - batch.failed, 0);
+  const processed = batch.completed + batch.failed;
+  const progress_percent = batch.total > 0
+    ? Math.max(0, Math.min(100, Math.round((processed / batch.total) * 100)))
+    : 0;
+
+  return {
+    active: !!batch.active,
+    total: batch.total,
+    completed: batch.completed,
+    failed: batch.failed,
+    pending,
+    progress_percent,
+    started_at: batch.started_at || null,
+    finished_at: batch.finished_at || null,
+  };
+}
+
+function beginUserSummaryRequest(userId) {
+  const current = summaryConcurrencyByUser.get(userId) || 0;
+  if (current >= MAX_CONCURRENT_SUMMARIES_PER_USER) {
+    return false;
+  }
+  summaryConcurrencyByUser.set(userId, current + 1);
+  return true;
+}
+
+function endUserSummaryRequest(userId) {
+  const current = summaryConcurrencyByUser.get(userId) || 0;
+  if (current <= 1) {
+    summaryConcurrencyByUser.delete(userId);
+    return;
+  }
+  summaryConcurrencyByUser.set(userId, current - 1);
+}
+
+function getDocumentsNeedingSummary(userId, openRouter = null) {
+  const resolvedOpenRouter = openRouter || buildOpenRouterResponse(userId, { includeSummaryBackfill: false });
+  return listSummaryCandidateDocuments(userId)
+    .map((doc) => ({
+      doc,
+      summaryState: buildDocumentSummaryResponse(doc, userId, resolvedOpenRouter),
+    }))
+    .filter(({ summaryState }) => summaryState.state === 'missing' || summaryState.state === 'failed');
+}
+
+function getDocumentsEligibleForSummaryRegeneration(userId, openRouter = null) {
+  const resolvedOpenRouter = openRouter || buildOpenRouterResponse(userId, { includeSummaryBackfill: false });
+  return listSummaryCandidateDocuments(userId)
+    .map((doc) => ({
+      doc,
+      summaryState: buildDocumentSummaryResponse(doc, userId, resolvedOpenRouter),
+    }))
+    .filter(({ summaryState }) => summaryState.can_generate && summaryState.state !== 'pending');
+}
+
+function getOpenRouterSummaryBackfill(userId, openRouter = null) {
+  const resolvedOpenRouter = openRouter || buildOpenRouterResponse(userId, { includeSummaryBackfill: false });
+  const pendingCount = listSummaryCandidateDocuments(userId)
+    .filter((doc) => buildDocumentSummaryResponse(doc, userId, resolvedOpenRouter).state === 'pending')
+    .length;
+  const regeneratableCount = getDocumentsEligibleForSummaryRegeneration(userId, resolvedOpenRouter).length;
+  const batchState = getSummaryBatchState(userId);
+
+  return {
+    missing_count: getDocumentsNeedingSummary(userId, resolvedOpenRouter).length,
+    regeneratable_count: regeneratableCount,
+    queue_size: pendingCount,
+    auto_generate_on_upload: true,
+    batches: {
+      missing: serializeSummaryBatch(batchState.missing),
+      regenerate: serializeSummaryBatch(batchState.regenerate),
+    },
+  };
+}
+
+const openRouterProvider = getAiProvider(AI_PROVIDER_OPENROUTER);
+
+function buildOpenRouterCatalog(models) {
+  return {
+    text: openRouterProvider.getTextModels(models),
+    vision: openRouterProvider.getVisionModels(models),
+  };
+}
+
+function sanitizeProviderErrorMessage(error, fallbackMessage) {
+  if (!error?.message) return fallbackMessage;
+  const message = String(error.message);
+  if (/invalid summary payload|invalid json payload|unterminated string in json|unexpected token/i.test(message)) {
+    return 'The model returned an unusable summary response. Regenerate again or choose a different model in Settings.';
+  }
+  return message.slice(0, 400);
+}
+
 function logDocumentEvent(documentId, userId, action, details = null) {
   const serializedDetails = details && typeof details === 'object' ? JSON.stringify(details) : null;
   db.prepare('INSERT INTO document_history (id, document_id, user_id, action, details, created_at) VALUES (?,?,?,?,?,?)')
@@ -243,6 +953,209 @@ function ensureUploadHistoryEntry(documentId, userId) {
   if (!doc) return;
   db.prepare('INSERT INTO document_history (id, document_id, user_id, action, details, created_at) VALUES (?,?,?,?,?,?)')
     .run(uid(), documentId, userId, 'uploaded', JSON.stringify({ name: doc.name }), doc.created_at || now());
+}
+
+async function generateDocumentSummaryForDocument(doc, userId, options = {}) {
+  const { force = false } = options;
+  const requestKey = getSummaryRequestKey(userId, doc.id);
+  const resolvedOpenRouter = buildOpenRouterResponse(userId, { includeSummaryBackfill: false });
+  const current = buildDocumentSummaryResponse(doc, userId, resolvedOpenRouter);
+
+  if (current.state === 'no_key' || current.state === 'model_missing') {
+    const error = new Error(current.message || 'OpenRouter setup is required before summaries can be generated.');
+    error.status = 400;
+    throw error;
+  }
+
+  if (!force && (current.state === 'ready' || current.state === 'unsupported' || current.state === 'pending')) {
+    return current;
+  }
+
+  if (inflightSummaryRequests.has(requestKey)) {
+    return inflightSummaryRequests.get(requestKey);
+  }
+
+  if (!beginUserSummaryRequest(userId)) {
+    const error = new Error('Too many summary requests are already running for this account. Please wait and try again.');
+    error.status = 429;
+    throw error;
+  }
+
+  const generationPromise = (async () => {
+    const credential = getOpenRouterCredential(userId);
+    if (!credential) {
+      const error = new Error('Add and validate your OpenRouter key in Settings to enable summaries.');
+      error.status = 400;
+      throw error;
+    }
+
+    const preferences = getOpenRouterPreferences(userId) || {};
+    const catalog = getOpenRouterModelCatalog(userId);
+    const fingerprint = getDocumentSummaryFingerprint(doc, resolvedOpenRouter);
+    const filePath = path.join(DATA_DIR, doc.storage_path);
+    const existing = getStoredDocumentSummary(doc.id, userId);
+
+    try {
+      const apiKey = decryptSecret(credential.encrypted_key);
+      const result = await summarizeDocument({
+        doc,
+        filePath,
+        provider: openRouterProvider,
+        apiKey,
+        textModelId: preferences.text_model_id || null,
+        visionModelId: preferences.vision_model_id || null,
+        textModels: catalog.text,
+        visionModels: catalog.vision,
+        summaryPrompt: preferences.summary_prompt || DEFAULT_SUMMARY_PROMPT,
+      });
+
+      if (result.status === 'completed') {
+        upsertDocumentSummary(doc.id, userId, {
+          provider: AI_PROVIDER_OPENROUTER,
+          model: result.model,
+          status: 'completed',
+          source_fingerprint: fingerprint,
+          coverage: result.coverage,
+          content_json: JSON.stringify(result.content),
+          error_message: null,
+          generated_at: now(),
+        });
+
+        logDocumentEvent(
+          doc.id,
+          userId,
+          force || existing?.status === 'completed' ? 'summary_regenerated' : 'summary_generated',
+          { model: result.model, coverage: result.coverage, mode: result.mode },
+        );
+      } else if (result.status === 'unsupported') {
+        upsertDocumentSummary(doc.id, userId, {
+          provider: AI_PROVIDER_OPENROUTER,
+          model: null,
+          status: 'unsupported',
+          source_fingerprint: fingerprint,
+          coverage: null,
+          content_json: null,
+          error_message: result.reason,
+          generated_at: now(),
+        });
+
+        logDocumentEvent(doc.id, userId, 'summary_unsupported', { reason: result.reason });
+      }
+
+      return buildDocumentSummaryResponse(doc, userId);
+    } catch (error) {
+      const message = sanitizeProviderErrorMessage(error, 'Summary generation failed');
+
+      upsertDocumentSummary(doc.id, userId, {
+        provider: AI_PROVIDER_OPENROUTER,
+        model: typeof doc.file_type === 'string' && doc.file_type.startsWith('image/')
+          ? preferences.vision_model_id || null
+          : preferences.text_model_id || null,
+        status: 'failed',
+        source_fingerprint: fingerprint,
+        coverage: null,
+        content_json: null,
+        error_message: message,
+        generated_at: now(),
+      });
+
+      if (error?.status === 401) {
+        upsertOpenRouterCredential(userId, {
+          encrypted_key: credential.encrypted_key,
+          key_label: credential.key_label || null,
+          last4: credential.last4 || null,
+          validated_at: credential.validated_at || null,
+          expires_at: credential.expires_at || null,
+          status: 'invalid',
+          last_error: message,
+          last_model_sync_at: credential.last_model_sync_at || null,
+        });
+      }
+
+      logDocumentEvent(doc.id, userId, 'summary_failed', { message });
+
+      const routeError = new Error(message);
+      routeError.status = error?.status || 502;
+      throw routeError;
+    } finally {
+      inflightSummaryRequests.delete(requestKey);
+      endUserSummaryRequest(userId);
+    }
+  })();
+
+  inflightSummaryRequests.set(requestKey, generationPromise);
+  return generationPromise;
+}
+
+async function processSummaryGenerationQueue() {
+  if (summaryQueueRunning) return;
+  summaryQueueRunning = true;
+
+  try {
+    while (summaryGenerationQueue.length > 0) {
+      const job = summaryGenerationQueue.shift();
+      if (!job) continue;
+
+      const requestKey = getSummaryRequestKey(job.userId, job.documentId);
+      queuedSummaryRequests.delete(requestKey);
+
+      const doc = getOwnedDocument(job.documentId, job.userId);
+      if (!doc || doc.trashed) {
+        markSummaryBatchProgress(job.userId, job.batchType, 'failed');
+        continue;
+      }
+
+      try {
+        await generateDocumentSummaryForDocument(doc, job.userId, { force: job.force });
+        markSummaryBatchProgress(job.userId, job.batchType, 'completed');
+      } catch (error) {
+        if (error?.status === 429) {
+          summaryGenerationQueue.push(job);
+          queuedSummaryRequests.add(requestKey);
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+        } else {
+          markSummaryBatchProgress(job.userId, job.batchType, 'failed');
+          console.error(`Summary generation failed for document ${job.documentId}:`, error?.message || error);
+        }
+      }
+    }
+  } finally {
+    summaryQueueRunning = false;
+    if (summaryGenerationQueue.length > 0) {
+      processSummaryGenerationQueue().catch((error) => {
+        console.error('Summary generation queue failed:', error?.message || error);
+      });
+    }
+  }
+}
+
+function enqueueDocumentSummaryGeneration(documentId, userId, options = {}) {
+  const requestKey = getSummaryRequestKey(userId, documentId);
+  if (queuedSummaryRequests.has(requestKey) || inflightSummaryRequests.has(requestKey)) {
+    return false;
+  }
+
+  queuedSummaryRequests.add(requestKey);
+  summaryGenerationQueue.push({
+    documentId,
+    userId,
+    force: options.force === true,
+    batchType: options.batchType || null,
+  });
+
+  processSummaryGenerationQueue().catch((error) => {
+    console.error('Summary generation queue failed:', error?.message || error);
+  });
+
+  return true;
+}
+
+function scheduleAutomaticSummaryGeneration(doc, userId) {
+  const summaryState = buildDocumentSummaryResponse(doc, userId);
+  if (summaryState.state !== 'missing') {
+    return false;
+  }
+  return enqueueDocumentSummaryGeneration(doc.id, userId, { force: false });
 }
 
 // ── Trash cleanup ──
@@ -619,6 +1532,167 @@ app.patch('/api/settings', auth, adminOnly, (req, res) => {
   res.json({ ok: true });
 });
 
+// ── AI Settings ──
+app.get('/api/profile/ai/openrouter', auth, (req, res) => {
+  res.json(buildOpenRouterResponse(req.user.id));
+});
+
+app.post('/api/profile/ai/openrouter-key', auth, async (req, res) => {
+  const apiKey = typeof req.body?.apiKey === 'string' ? req.body.apiKey.trim() : '';
+  if (!apiKey) {
+    return res.status(400).json({ error: 'OpenRouter API key is required' });
+  }
+
+  try {
+    const keyInfo = await openRouterProvider.validateApiKey(apiKey);
+    const models = await openRouterProvider.listModels(apiKey);
+    const catalog = buildOpenRouterCatalog(models);
+    const timestamp = now();
+
+    upsertOpenRouterCredential(req.user.id, {
+      encrypted_key: encryptSecret(apiKey),
+      key_label: keyInfo?.label || null,
+      last4: getApiKeyLast4(apiKey),
+      validated_at: timestamp,
+      expires_at: keyInfo?.expires_at || null,
+      status: 'valid',
+      last_error: null,
+      last_model_sync_at: timestamp,
+    });
+    upsertOpenRouterModelCatalog(req.user.id, catalog);
+
+    res.json(buildOpenRouterResponse(req.user.id));
+  } catch (error) {
+    res.status(error?.status || 502).json({
+      error: sanitizeProviderErrorMessage(error, 'Failed to validate the OpenRouter API key'),
+    });
+  }
+});
+
+app.delete('/api/profile/ai/openrouter-key', auth, (req, res) => {
+  deleteOpenRouterSetup(req.user.id);
+  res.json({ ok: true });
+});
+
+app.patch('/api/profile/ai/openrouter/preferences', auth, (req, res) => {
+  const catalog = getOpenRouterModelCatalog(req.user.id);
+  const updates = {};
+
+  if (!Object.prototype.hasOwnProperty.call(req.body || {}, 'textModelId')
+    && !Object.prototype.hasOwnProperty.call(req.body || {}, 'visionModelId')
+    && !Object.prototype.hasOwnProperty.call(req.body || {}, 'summaryPrompt')) {
+    return res.status(400).json({ error: 'No AI preference changes provided' });
+  }
+
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, 'textModelId')) {
+    const textModelId = req.body.textModelId ? String(req.body.textModelId).trim() : null;
+    if (textModelId && !catalog.text.some((model) => model.id === textModelId)) {
+      return res.status(400).json({ error: 'Choose a valid text summary model from the available list' });
+    }
+    updates.text_model_id = textModelId;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, 'visionModelId')) {
+    const visionModelId = req.body.visionModelId ? String(req.body.visionModelId).trim() : null;
+    if (visionModelId && !catalog.vision.some((model) => model.id === visionModelId)) {
+      return res.status(400).json({ error: 'Choose a valid vision summary model from the available list' });
+    }
+    updates.vision_model_id = visionModelId;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, 'summaryPrompt')) {
+    const rawPrompt = typeof req.body.summaryPrompt === 'string' ? req.body.summaryPrompt : '';
+    const summaryPrompt = rawPrompt.trim();
+    if (summaryPrompt && summaryPrompt.length > 4000) {
+      return res.status(400).json({ error: 'Summary prompt must be 4000 characters or less' });
+    }
+    updates.summary_prompt = summaryPrompt || null;
+  }
+
+  upsertOpenRouterPreferences(req.user.id, updates);
+  res.json(buildOpenRouterResponse(req.user.id));
+});
+
+app.post('/api/profile/ai/openrouter/models/refresh', auth, async (req, res) => {
+  const credential = getOpenRouterCredential(req.user.id);
+  if (!credential) {
+    return res.status(404).json({ error: 'No OpenRouter key is configured for this account' });
+  }
+
+  try {
+    const apiKey = decryptSecret(credential.encrypted_key);
+    const keyInfo = await openRouterProvider.validateApiKey(apiKey);
+    const models = await openRouterProvider.listModels(apiKey);
+    const catalog = buildOpenRouterCatalog(models);
+    const timestamp = now();
+
+    upsertOpenRouterCredential(req.user.id, {
+      encrypted_key: credential.encrypted_key,
+      key_label: keyInfo?.label || credential.key_label || null,
+      last4: credential.last4 || getApiKeyLast4(apiKey),
+      validated_at: timestamp,
+      expires_at: keyInfo?.expires_at || credential.expires_at || null,
+      status: 'valid',
+      last_error: null,
+      last_model_sync_at: timestamp,
+    });
+    upsertOpenRouterModelCatalog(req.user.id, catalog);
+
+    res.json(buildOpenRouterResponse(req.user.id));
+  } catch (error) {
+    upsertOpenRouterCredential(req.user.id, {
+      encrypted_key: credential.encrypted_key,
+      key_label: credential.key_label || null,
+      last4: credential.last4 || null,
+      validated_at: credential.validated_at || null,
+      expires_at: credential.expires_at || null,
+      status: error?.status === 401 ? 'invalid' : credential.status || 'error',
+      last_error: sanitizeProviderErrorMessage(error, 'Failed to refresh the OpenRouter model list'),
+      last_model_sync_at: credential.last_model_sync_at || null,
+    });
+
+    res.status(error?.status || 502).json({
+      error: sanitizeProviderErrorMessage(error, 'Failed to refresh the OpenRouter model list'),
+    });
+  }
+});
+
+app.post('/api/profile/ai/openrouter/backfill', auth, (req, res) => {
+  const openRouter = buildOpenRouterResponse(req.user.id, { includeSummaryBackfill: false });
+  const docsNeedingSummary = getDocumentsNeedingSummary(req.user.id, openRouter);
+  startSummaryBatch(req.user.id, 'missing', docsNeedingSummary.length);
+
+  let queued = 0;
+  for (const { doc, summaryState } of docsNeedingSummary) {
+    if (enqueueDocumentSummaryGeneration(doc.id, req.user.id, { force: summaryState.state === 'failed', batchType: 'missing' })) {
+      queued += 1;
+    }
+  }
+
+  res.json({
+    queued,
+    settings: buildOpenRouterResponse(req.user.id),
+  });
+});
+
+app.post('/api/profile/ai/openrouter/regenerate-all', auth, (req, res) => {
+  const openRouter = buildOpenRouterResponse(req.user.id, { includeSummaryBackfill: false });
+  const docsForRegeneration = getDocumentsEligibleForSummaryRegeneration(req.user.id, openRouter);
+  startSummaryBatch(req.user.id, 'regenerate', docsForRegeneration.length);
+
+  let queued = 0;
+  for (const { doc } of docsForRegeneration) {
+    if (enqueueDocumentSummaryGeneration(doc.id, req.user.id, { force: true, batchType: 'regenerate' })) {
+      queued += 1;
+    }
+  }
+
+  res.json({
+    queued,
+    settings: buildOpenRouterResponse(req.user.id),
+  });
+});
+
 // ── Registration (public) ──
 app.post('/api/auth/register', (req, res) => {
   const regEnabled = db.prepare("SELECT value FROM settings WHERE key='registration_enabled'").get();
@@ -735,6 +1809,7 @@ app.post('/api/documents/upload', auth, upload.single('file'), (req, res) => {
     .run(doc.id, doc.user_id, doc.name, doc.file_type, doc.file_size, doc.storage_path,
       doc.starred, doc.trashed, doc.trashed_at, doc.shared, doc.share_token, doc.uploaded_by_name_snapshot, doc.created_at, doc.updated_at);
   logDocumentEvent(doc.id, req.user.id, 'uploaded', { name: doc.name });
+  const summaryAutoStarted = scheduleAutomaticSummaryGeneration(doc, req.user.id);
 
   res.json({
     ...doc,
@@ -743,6 +1818,7 @@ app.post('/api/documents/upload', auth, upload.single('file'), (req, res) => {
     starred: false,
     trashed: false,
     shared: false,
+    summary_auto_started: summaryAutoStarted,
     tags: [],
     tag_ids: [],
   });
@@ -889,6 +1965,29 @@ app.get('/api/documents/:id/blob', auth, (req, res) => {
   const filePath = path.join(DATA_DIR, doc.storage_path);
   res.setHeader('Content-Type', doc.file_type);
   res.sendFile(filePath);
+});
+
+app.get('/api/documents/:id/summary', auth, (req, res) => {
+  const doc = getOwnedDocument(req.params.id, req.user.id);
+  if (!doc) return res.status(404).json({ error: 'Not found' });
+
+  res.json(buildDocumentSummaryResponse(doc, req.user.id));
+});
+
+app.post('/api/documents/:id/summary', auth, async (req, res) => {
+  const doc = getOwnedDocument(req.params.id, req.user.id);
+  if (!doc) return res.status(404).json({ error: 'Not found' });
+
+  const force = req.body?.force === true;
+  try {
+    const responseBody = await generateDocumentSummaryForDocument(doc, req.user.id, { force });
+    res.json(responseBody);
+  } catch (error) {
+    res.status(error?.status || 502).json({
+      error: sanitizeProviderErrorMessage(error, 'Summary generation failed'),
+      state: buildDocumentSummaryResponse(doc, req.user.id).state,
+    });
+  }
 });
 
 // ── Tags ──

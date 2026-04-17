@@ -12,8 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { X, Download, Share2, Copy, Star, Plus, UserX, History } from 'lucide-react';
-import FileTypeIcon from './FileTypeIcon';
+import { X, Download, Share2, Copy, Star, Plus, UserX, History, Sparkles } from 'lucide-react';
 import { useDocumentHistory, useDocumentMutations } from '@/hooks/useDocuments';
 import { toast } from 'sonner';
 import { copyTextToClipboard, getSharedDocumentUrl } from '@/lib/share';
@@ -22,6 +21,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/contexts/AuthContext';
 import { getUploadedByLabel } from '@/lib/documentMeta';
 import DocumentPreview from './DocumentPreview';
+import { useDocumentSummary } from '@/hooks/useDocumentSummary';
+import DocumentSummaryCard from './DocumentSummaryCard';
 
 type Props = {
   document: Document | null;
@@ -87,6 +88,10 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
     isLoading: isHistoryLoading,
     error: historyError,
   } = useDocumentHistory(doc?.id);
+  const {
+    summaryQuery,
+    generateSummary,
+  } = useDocumentSummary(doc?.id);
   const { upsertNote } = useNoteMutations();
   const { downloadDocument, toggleShare, toggleStar } = useDocumentMutations();
   const { data: allTags } = useTags();
@@ -177,6 +182,23 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
   const typeInfo = getFileTypeInfo(doc.file_type);
   const docTagIds = optimisticTags?.map((t) => t.id) || [];
   const availableTags = allTags?.filter((t) => !docTagIds.includes(t.id)) || [];
+  const summaryState = summaryQuery.data;
+
+  const handleGenerateSummary = (force = false) => {
+    if (summaryState?.state === 'pending') {
+      toast.message(summaryState.message || 'Summary generation is already running');
+      return;
+    }
+    if (summaryState?.state === 'no_key' || summaryState?.state === 'model_missing') {
+      toast.error(summaryState.message || 'OpenRouter setup is required in Settings');
+      return;
+    }
+    if (summaryState?.state === 'unsupported' && !force) {
+      toast.error(summaryState.message || 'This document cannot be summarized yet');
+      return;
+    }
+    generateSummary.mutate({ force });
+  };
 
   const handleSaveNote = () => {
     upsertNote.mutate({ documentId: doc.id, content: noteText });
@@ -323,6 +345,10 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
       note_updated: 'Edited comment',
       comment_added: 'Added comment',
       comment_edited: 'Edited comment',
+      summary_generated: 'Generated summary',
+      summary_regenerated: 'Regenerated summary',
+      summary_failed: 'Summary generation failed',
+      summary_unsupported: 'Summary unsupported',
     };
     return map[action] || action.split('_').join(' ');
   };
@@ -372,6 +398,27 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent>Download</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="rounded-lg border-border/40"
+                          onClick={() => handleGenerateSummary(summaryState?.state === 'ready' || summaryState?.state === 'failed')}
+                          aria-label={summaryState?.state === 'ready' ? 'Regenerate summary' : 'Summarize document'}
+                          disabled={generateSummary.isPending || summaryState?.state === 'pending'}
+                        >
+                          <Sparkles className="w-3.5 h-3.5" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {summaryState?.state === 'pending'
+                          ? 'Summary generation is already running'
+                          : summaryState?.state === 'ready'
+                            ? 'Regenerate summary'
+                            : 'Summarize document'}
+                      </TooltipContent>
                     </Tooltip>
                     <Tooltip>
                       <TooltipTrigger asChild>
@@ -449,6 +496,13 @@ export default function DocumentViewer({ document: doc, open, onClose }: Props) 
                       )}
                     </div>
                   </div>
+
+                  <DocumentSummaryCard
+                    summaryState={summaryState}
+                    isLoading={summaryQuery.isLoading}
+                    isGenerating={generateSummary.isPending}
+                    onGenerate={handleGenerateSummary}
+                  />
                 </TabsContent>
 
                 <TabsContent value="notes" className="px-4 sm:px-5 pb-5 pt-4 mt-0 flex-1 flex flex-col">

@@ -14,4 +14,6 @@ services:
       - ADMIN_PASSWORD=admin
       - TRASH_RETENTION_DAYS=30
       - COOKIE_SECRET=change-me-in-production
+      - AI_SECRETS_MASTER_KEY=change-me-for-ai-secrets
+      - MAX_CONCURRENT_SUMMARIES_PER_USER=2
     restart: unless-stopped
