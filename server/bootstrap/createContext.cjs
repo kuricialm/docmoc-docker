@@ -127,6 +127,12 @@ function createContext(env = process.env) {
     now,
     uid,
   });
+  if (Array.isArray(config.summaryRecoveryPaths) && config.summaryRecoveryPaths.length > 0) {
+    const recovery = services.openRouter.recoverLegacySummaries(config.summaryRecoveryPaths);
+    if (recovery.scanned > 0) {
+      console.log('OpenRouter summary recovery:', JSON.stringify(recovery));
+    }
+  }
   services.documents = createDocumentsService({
     config,
     documentFilesStorage: storage.documentFiles,

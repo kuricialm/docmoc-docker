@@ -45,6 +45,16 @@ function createDocumentsRepository(db) {
       return db.prepare('SELECT id, storage_path FROM documents WHERE trashed = 1 AND trashed_at < ?').all(cutoff);
     },
 
+    findBySummaryRecoveryKey(name, fileType, fileSize) {
+      return db.prepare(`
+        SELECT *
+        FROM documents
+        WHERE name = ?
+          AND ((file_type = ?) OR (file_type IS NULL AND ? IS NULL))
+          AND file_size = ?
+      `).all(name, fileType, fileType, fileSize);
+    },
+
     getByIdAndUserId(documentId, userId) {
       return db.prepare('SELECT * FROM documents WHERE id = ? AND user_id = ?').get(documentId, userId) || null;
     },

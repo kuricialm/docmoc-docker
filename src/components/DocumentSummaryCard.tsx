@@ -24,7 +24,8 @@ export default function DocumentSummaryCard({
   isGenerating,
   onGenerate,
 }: Props) {
-  const actionButton = summaryState?.state === 'ready'
+  const canGenerate = !!summaryState?.can_generate;
+  const actionButton = summaryState?.state === 'ready' && canGenerate
     ? (
         <Button
           type="button"
@@ -34,11 +35,11 @@ export default function DocumentSummaryCard({
           onClick={() => onGenerate(true)}
           disabled={isGenerating}
         >
-          {isGenerating ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1.5 h-3.5 w-3.5" />}
+            {isGenerating ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1.5 h-3.5 w-3.5" />}
           Regenerate
         </Button>
       )
-    : summaryState?.state === 'missing'
+    : summaryState?.state === 'missing' && canGenerate
       ? (
           <Button
             type="button"
@@ -52,7 +53,7 @@ export default function DocumentSummaryCard({
             Generate Summary
           </Button>
         )
-      : summaryState?.state === 'failed'
+      : summaryState?.state === 'failed' && canGenerate
         ? (
             <Button
               type="button"
@@ -109,7 +110,7 @@ export default function DocumentSummaryCard({
             <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
             <p>Generate an AI summary for this document using your current prompt.</p>
           </div>
-        ) : summaryState.state === 'no_key' || summaryState.state === 'model_missing' ? (
+        ) : summaryState.state === 'no_key' || summaryState.state === 'key_invalid' || summaryState.state === 'model_missing' ? (
           <div className="space-y-3">
             <div className="flex items-start gap-2 text-sm text-muted-foreground">
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />

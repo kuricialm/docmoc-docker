@@ -38,7 +38,7 @@ export function getOpenRouterCredentialIndicator(settings: OpenRouterSettings | 
   }
 
   return {
-    label: 'OpenRouter key disconnected or not validated',
+    label: 'Saved OpenRouter key needs revalidation',
     dotClassName: 'bg-rose-500 ring-rose-400/60 animate-pulse',
   };
 }

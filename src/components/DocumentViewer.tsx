@@ -59,6 +59,8 @@ function DocumentQuickActions({
 }: DocumentQuickActionsProps) {
   const summaryActionLabel = summaryState?.state === 'pending'
     ? 'Summary generation is already running'
+    : summaryState?.can_generate === false && summaryState?.message
+      ? summaryState.message
     : summaryState?.state === 'ready'
       ? 'Regenerate summary'
       : 'Summarize document';
@@ -84,7 +86,7 @@ function DocumentQuickActions({
                 className="rounded-lg border-border/40"
                 onClick={onGenerateSummary}
                 aria-label={summaryState?.state === 'ready' ? 'Regenerate summary' : 'Summarize document'}
-                disabled={isGeneratingSummary || summaryState?.state === 'pending'}
+                disabled={isGeneratingSummary || summaryState?.state === 'pending' || summaryState?.can_generate === false}
               >
                 <Sparkles className="w-3.5 h-3.5" />
               </Button>
@@ -540,8 +542,12 @@ export default function DocumentViewer({ document, open, onClose }: Props) {
       toast.message(summaryState.message || 'Summary generation is already running');
       return;
     }
-    if (summaryState?.state === 'no_key' || summaryState?.state === 'model_missing') {
+    if (summaryState?.state === 'no_key' || summaryState?.state === 'key_invalid' || summaryState?.state === 'model_missing') {
       toast.error(summaryState.message || 'OpenRouter setup is required in Settings');
+      return;
+    }
+    if (summaryState?.can_generate === false) {
+      toast.error(summaryState.message || 'Summary generation is not available right now');
       return;
     }
     if (summaryState?.state === 'unsupported' && !force) {

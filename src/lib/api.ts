@@ -147,7 +147,7 @@ export type DocumentSummaryState = {
   provider: string;
   format: 'brief';
   mode: 'text' | 'vision' | 'unsupported';
-  state: 'no_key' | 'model_missing' | 'missing' | 'pending' | 'ready' | 'failed' | 'unsupported';
+  state: 'no_key' | 'key_invalid' | 'model_missing' | 'missing' | 'pending' | 'ready' | 'failed' | 'unsupported';
   can_generate: boolean;
   message: string | null;
   coverage: 'full' | 'truncated' | null;

@@ -1,3 +1,5 @@
+const fs = require('fs');
+const Database = require('better-sqlite3');
 const { decryptSecret, encryptSecret, getApiKeyLast4 } = require('../../lib/aiSecrets.cjs');
 const { parseJsonValue } = require('../../lib/core.cjs');
 const { summarizeDocument, DEFAULT_SUMMARY_PROMPT } = require('../summary/index.cjs');
@@ -135,6 +137,10 @@ function createOpenRouterService({
       return 'The model returned an unusable summary response. Regenerate again or choose a different model in Settings.';
     }
     return message.slice(0, 400);
+  }
+
+  function sanitizeSummaryRecoveryMessage(error) {
+    return sanitizeProviderErrorMessage(error, 'Saved key needs revalidation in Settings before generating summaries.');
   }
 
   function logDocumentEvent(documentId, userId, action, details = null) {
@@ -299,10 +305,12 @@ function createOpenRouterService({
     if (resolvedOpenRouter.credential?.status && resolvedOpenRouter.credential.status !== 'valid') {
       return {
         can_generate: false,
-        message: resolvedOpenRouter.credential.last_error || 'Revalidate your OpenRouter key in Settings before generating summaries.',
+        message: resolvedOpenRouter.credential.last_error
+          ? `Your saved OpenRouter key needs revalidation in Settings before generating summaries. ${resolvedOpenRouter.credential.last_error}`
+          : 'Your saved OpenRouter key needs revalidation in Settings before generating summaries.',
         mode,
         openRouter: resolvedOpenRouter,
-        state: 'no_key',
+        state: 'key_invalid',
       };
     }
 
@@ -366,7 +374,6 @@ function createOpenRouterService({
     const baseState = buildSummarySupportState(doc, userId, openRouter);
     const stored = getStoredSummary(doc.id, userId);
     const storedSummaryContent = normalizeStoredSummaryContent(parseJsonValue(stored?.content_json, null));
-    const canUseStoredWithoutKey = baseState.state === 'no_key' && stored?.status === 'completed' && !!storedSummaryContent;
     const storedMatchesCurrentSettings = !!stored && doesStoredSummaryFingerprintMatch(stored.source_fingerprint, doc);
 
     if (isSummaryQueuedOrInflight(userId, doc.id) && (!stored || stored.status !== 'completed' || !storedMatchesCurrentSettings)) {
@@ -384,7 +391,7 @@ function createOpenRouterService({
       };
     }
 
-    if (!stored || (!storedMatchesCurrentSettings && !canUseStoredWithoutKey)) {
+    if (!stored || !storedMatchesCurrentSettings) {
       return {
         ...baseState,
         coverage: null,
@@ -411,7 +418,7 @@ function createOpenRouterService({
 
       return {
         ...baseState,
-        can_generate: true,
+        can_generate: baseState.can_generate,
         coverage: stored.coverage || null,
         format: config.summaryFormatBrief,
         generated_at: stored.generated_at || null,
@@ -426,7 +433,7 @@ function createOpenRouterService({
     if (stored.status === 'failed') {
       return {
         ...baseState,
-        can_generate: true,
+        can_generate: baseState.can_generate,
         coverage: null,
         format: config.summaryFormatBrief,
         generated_at: stored.generated_at || null,
@@ -468,7 +475,7 @@ function createOpenRouterService({
     const resolvedOpenRouter = openRouter || buildOpenRouterResponse(userId, { includeSummaryBackfill: false });
     return listSummaryCandidateDocuments(userId)
       .map((doc) => ({ doc, summaryState: buildDocumentSummaryResponse(doc, userId, resolvedOpenRouter) }))
-      .filter(({ summaryState }) => summaryState.state === 'missing' || summaryState.state === 'failed');
+      .filter(({ summaryState }) => summaryState.can_generate && (summaryState.state === 'missing' || summaryState.state === 'failed'));
   }
 
   function getDocumentsEligibleForSummaryRegeneration(userId, openRouter = null) {
@@ -502,10 +509,11 @@ function createOpenRouterService({
     const { force = false } = options;
     const requestKey = getSummaryRequestKey(userId, doc.id);
     const resolvedOpenRouter = buildOpenRouterResponse(userId, { includeSummaryBackfill: false });
+    const supportState = buildSummarySupportState(doc, userId, resolvedOpenRouter);
     const current = buildDocumentSummaryResponse(doc, userId, resolvedOpenRouter);
 
-    if (current.state === 'no_key' || current.state === 'model_missing') {
-      throw badRequest(current.message || 'OpenRouter setup is required before summaries can be generated.');
+    if (supportState.state === 'no_key' || supportState.state === 'key_invalid' || supportState.state === 'model_missing') {
+      throw badRequest(supportState.message || 'OpenRouter setup is required before summaries can be generated.');
     }
 
     if (!force && (current.state === 'ready' || current.state === 'unsupported' || current.state === 'pending')) {
@@ -599,7 +607,7 @@ function createOpenRouterService({
             expires_at: credential.expires_at || null,
             key_label: credential.key_label || null,
             last4: credential.last4 || null,
-            last_error: message,
+            last_error: sanitizeSummaryRecoveryMessage(error),
             last_model_sync_at: credential.last_model_sync_at || null,
             status: 'invalid',
             validated_at: credential.validated_at || null,
@@ -679,6 +687,112 @@ function createOpenRouterService({
     });
 
     return true;
+  }
+
+  function recoverLegacySummaries(dbPaths = []) {
+    const uniquePaths = [...new Set(
+      dbPaths
+        .filter((dbPath) => typeof dbPath === 'string' && dbPath.trim())
+        .map((dbPath) => dbPath.trim())
+    )];
+    const summary = {
+      imported: 0,
+      scanned: 0,
+      skipped_ambiguous: 0,
+      skipped_existing: 0,
+      skipped_invalid: 0,
+      skipped_missing: 0,
+      sources: [],
+    };
+
+    for (const dbPath of uniquePaths) {
+      const sourceStats = {
+        imported: 0,
+        path: dbPath,
+        scanned: 0,
+        skipped_ambiguous: 0,
+        skipped_existing: 0,
+        skipped_invalid: 0,
+        skipped_missing: 0,
+      };
+      summary.sources.push(sourceStats);
+
+      if (!fs.existsSync(dbPath)) {
+        continue;
+      }
+
+      let externalDb;
+      try {
+        externalDb = new Database(dbPath, { readonly: true, fileMustExist: true });
+        const rows = externalDb.prepare(`
+          SELECT
+            s.provider,
+            s.model,
+            s.coverage,
+            s.content_json,
+            s.generated_at,
+            d.name,
+            d.file_type,
+            d.file_size
+          FROM document_summaries s
+          JOIN documents d ON d.id = s.document_id
+          WHERE s.status = 'completed'
+        `).all();
+
+        for (const row of rows) {
+          sourceStats.scanned += 1;
+          summary.scanned += 1;
+
+          const normalizedContent = normalizeStoredSummaryContent(parseJsonValue(row.content_json, null));
+          if (!normalizedContent) {
+            sourceStats.skipped_invalid += 1;
+            summary.skipped_invalid += 1;
+            continue;
+          }
+
+          const matches = documentsRepository.findBySummaryRecoveryKey(row.name, row.file_type || null, row.file_size);
+          if (matches.length === 0) {
+            sourceStats.skipped_missing += 1;
+            summary.skipped_missing += 1;
+            continue;
+          }
+
+          if (matches.length > 1) {
+            sourceStats.skipped_ambiguous += 1;
+            summary.skipped_ambiguous += 1;
+            continue;
+          }
+
+          const targetDoc = matches[0];
+          const existing = getStoredSummary(targetDoc.id, targetDoc.user_id);
+          if (existing?.status === 'completed') {
+            sourceStats.skipped_existing += 1;
+            summary.skipped_existing += 1;
+            continue;
+          }
+
+          upsertDocumentSummary(targetDoc.id, targetDoc.user_id, {
+            content_json: row.content_json,
+            coverage: row.coverage || null,
+            error_message: null,
+            generated_at: row.generated_at || now(),
+            model: row.model || null,
+            provider: row.provider || config.aiProviderOpenRouter,
+            source_fingerprint: getDocumentSummaryFingerprint(targetDoc),
+            status: 'completed',
+          });
+
+          sourceStats.imported += 1;
+          summary.imported += 1;
+        }
+      } catch (error) {
+        console.warn(`Legacy summary recovery failed for ${dbPath}:`, error?.message || error);
+      } finally {
+        if (externalDb) externalDb.close();
+      }
+    }
+
+    return summary;
   }
 
   return {
@@ -776,6 +890,8 @@ function createOpenRouterService({
         settings: buildOpenRouterResponse(userId),
       };
     },
+
+    recoverLegacySummaries,
 
     removeKey(userId) {
       deleteSetup(userId);

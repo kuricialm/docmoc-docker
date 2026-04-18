@@ -27,6 +27,7 @@ describe('createApp', () => {
       ADMIN_PASSWORD: 'admin',
       COOKIE_SECRET: 'test-secret',
       DATA_DIR: dataDir,
+      HOME: dataDir,
       PORT: '0',
     });
     const app = createApp(context);

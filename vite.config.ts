@@ -16,7 +16,7 @@ function expressBackend() {
       proc = spawn('node', ['server.cjs'], {
         cwd: path.resolve(__dirname),
         stdio: 'inherit',
-        env: { ...process.env, PORT: '3001', DATA_DIR: path.join(__dirname, 'data') },
+        env: { ...process.env, PORT: '3001' },
       });
       proc.on('error', (err) => console.error('[express-backend]', err.message));
       proc.on('exit', (code) => { console.log('[express-backend] exited', code); proc = null; });
