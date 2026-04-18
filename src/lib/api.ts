@@ -253,6 +253,28 @@ async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
   return body as T;
 }
 
+async function blobFetch(path: string, opts?: RequestInit): Promise<Blob | undefined> {
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      credentials: 'include',
+      ...opts,
+    });
+  } catch {
+    return undefined;
+  }
+
+  if (res.status === 401) {
+    throw new Error('PASSWORD_REQUIRED');
+  }
+
+  if (!res.ok) {
+    return undefined;
+  }
+
+  return res.blob();
+}
+
 function mapUser(u: ApiUser): User {
   return {
     id: u.id,
@@ -529,25 +551,14 @@ export async function downloadDocument(docId: string, fileName: string): Promise
   URL.revokeObjectURL(url);
 }
 
-export function getDocumentFileUrl(docId: string): string {
-  return `${BASE}/documents/${docId}/blob`;
-}
-
 export async function getDocumentBlob(docId: string): Promise<Blob | undefined> {
-  try {
-    const res = await fetch(`${BASE}/documents/${docId}/blob`, { credentials: 'include' });
-    if (!res.ok) return undefined;
-    return res.blob();
-  } catch {
-    return undefined;
-  }
+  return blobFetch(`/documents/${docId}/blob`);
 }
 
-export async function getSharedDocument(token: string, password?: string): Promise<DocumentWithTags | null> {
-  const suffix = password ? `?password=${encodeURIComponent(password)}` : '';
+export async function getSharedDocument(token: string): Promise<DocumentWithTags | null> {
   let res: Response;
   try {
-    res = await fetch(`${BASE}/shared/${token}${suffix}`, { credentials: 'include' });
+    res = await fetch(`${BASE}/shared/${token}`, { credentials: 'include' });
   } catch {
     throw new Error('Cannot connect to backend. Is the server running?');
   }
@@ -557,20 +568,31 @@ export async function getSharedDocument(token: string, password?: string): Promi
   return body as DocumentWithTags | null;
 }
 
-export function getSharedDocumentFileUrl(token: string, password?: string): string {
-  const suffix = password ? `?password=${encodeURIComponent(password)}` : '';
-  return `${BASE}/shared/${token}/download${suffix}`;
+export async function unlockSharedDocument(token: string, password: string): Promise<DocumentWithTags | null> {
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}/shared/${token}/unlock`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+    });
+  } catch {
+    throw new Error('Cannot connect to backend. Is the server running?');
+  }
+
+  if (res.status === 401) throw new Error('PASSWORD_REQUIRED');
+  if (!res.ok) return null;
+  const body = await readJsonBody(res);
+  return body as DocumentWithTags | null;
 }
 
 export async function getSharedDocumentBlob(token: string, password?: string): Promise<Blob | undefined> {
-  try {
-    const suffix = password ? `?password=${encodeURIComponent(password)}` : '';
-    const res = await fetch(`${BASE}/shared/${token}/download${suffix}`, { credentials: 'include' });
-    if (!res.ok) return undefined;
-    return res.blob();
-  } catch {
-    return undefined;
-  }
+  return blobFetch(`/shared/${token}/blob`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(password ? { password } : {}),
+  });
 }
 
 export async function getDocumentHistory(documentId: string): Promise<DocumentHistoryRecord[]> {

@@ -10,9 +10,13 @@ services:
     volumes:
       - ./data:/app/data
     environment:
-      - ADMIN_EMAIL=admin@docmoc.local
-      - ADMIN_PASSWORD=admin
-      - COOKIE_SECRET=change-me-in-production
-      - AI_SECRETS_MASTER_KEY=change-me-for-ai-secrets
-      - MAX_CONCURRENT_SUMMARIES_PER_USER=2
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@docmoc.local}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD to a strong value}
+      NODE_ENV: ${NODE_ENV:-production}
+      COOKIE_SECRET: ${COOKIE_SECRET:?Set COOKIE_SECRET to a strong value}
+      AI_SECRETS_MASTER_KEY: ${AI_SECRETS_MASTER_KEY:?Set AI_SECRETS_MASTER_KEY to a strong value}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
+      MAX_BRANDING_UPLOAD_BYTES: ${MAX_BRANDING_UPLOAD_BYTES:-2097152}
+      MAX_CONCURRENT_SUMMARIES_PER_USER: ${MAX_CONCURRENT_SUMMARIES_PER_USER:-2}
+      MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-26214400}
     restart: on-failure:5

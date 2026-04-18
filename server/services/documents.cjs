@@ -1,5 +1,6 @@
 const { badRequest, notFound, payloadTooLarge } = require('../errors/apiError.cjs');
 const { extFromMime, normalizeUploadedFilename } = require('../lib/fileMeta.cjs');
+const { isSafePreviewMimeType } = require('../lib/uploadPolicy.cjs');
 
 function createDocumentsService({
   config,
@@ -33,6 +34,7 @@ function createDocumentsService({
     getBlob(documentId, userId) {
       const doc = documentsRepository.getByIdAndUserId(documentId, userId);
       if (!doc) throw notFound('Not found');
+      if (!isSafePreviewMimeType(doc.file_type)) throw badRequest('Preview is not available for this file type');
       return {
         contentType: doc.file_type,
         filePath: documentFilesStorage.getAbsolutePath(doc.storage_path),

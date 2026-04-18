@@ -1,13 +1,13 @@
 const bcrypt = require('bcryptjs');
 const { badRequest, conflict, notFound } = require('../errors/apiError.cjs');
-const { isValidPassword, normalizeEmail } = require('../validators/common.cjs');
+const { isValidPassword, MIN_PASSWORD_LENGTH, normalizeEmail } = require('../validators/common.cjs');
 
 function createUsersService({ sessionsRepository, usersRepository, now, uid }) {
   return {
     createUser({ email, fullName, password, role }) {
       const normalizedEmail = normalizeEmail(email);
       if (!normalizedEmail) throw badRequest('Valid email is required');
-      if (!isValidPassword(password)) throw badRequest('Password must be at least 4 characters');
+      if (!isValidPassword(password)) throw badRequest(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`);
       if (role && role !== 'admin' && role !== 'user') throw badRequest('Invalid role');
       if (usersRepository.getByEmail(normalizedEmail)) throw badRequest('Email already exists');
 
@@ -86,7 +86,7 @@ function createUsersService({ sessionsRepository, usersRepository, now, uid }) {
     },
 
     updateUserPassword(userId, newPassword) {
-      if (!isValidPassword(newPassword)) throw badRequest('Password must be at least 4 characters');
+      if (!isValidPassword(newPassword)) throw badRequest(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`);
       const target = usersRepository.getById(userId);
       if (!target) throw notFound('User not found');
       usersRepository.updatePassword(userId, bcrypt.hashSync(newPassword, 10));

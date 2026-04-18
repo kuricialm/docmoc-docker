@@ -13,7 +13,7 @@ function sendNoCacheFile(res, filePath) {
 function createBrandingRoutes({ authMiddleware, brandingService, uploadMiddleware }) {
   const router = express.Router();
 
-  router.post('/api/profile/logo', authMiddleware.auth, authMiddleware.adminOnly, uploadMiddleware.single('file'), asyncHandler(async (req, res) => {
+  router.post('/api/profile/logo', authMiddleware.auth, authMiddleware.adminOnly, uploadMiddleware.brandingLogo.single('file'), asyncHandler(async (req, res) => {
     if (!req.file) throw badRequest('No file');
     res.json(brandingService.uploadLogo({
       extension: extFromMime(req.file.mimetype),
@@ -30,7 +30,7 @@ function createBrandingRoutes({ authMiddleware, brandingService, uploadMiddlewar
     sendNoCacheFile(res, brandingService.resolveAsset('logo', req.params.filename));
   }));
 
-  router.post('/api/profile/favicon', authMiddleware.auth, authMiddleware.adminOnly, uploadMiddleware.single('file'), asyncHandler(async (req, res) => {
+  router.post('/api/profile/favicon', authMiddleware.auth, authMiddleware.adminOnly, uploadMiddleware.brandingFavicon.single('file'), asyncHandler(async (req, res) => {
     if (!req.file) throw badRequest('No file');
     res.json(brandingService.uploadFavicon({
       extension: extFromMime(req.file.mimetype),

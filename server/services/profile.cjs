@@ -1,6 +1,6 @@
 const bcrypt = require('bcryptjs');
 const { badRequest, conflict } = require('../errors/apiError.cjs');
-const { isValidPassword, normalizeEmail } = require('../validators/common.cjs');
+const { isValidPassword, MIN_PASSWORD_LENGTH, normalizeEmail } = require('../validators/common.cjs');
 
 function createProfileService({ sessionsRepository, usersRepository }) {
   return {
@@ -14,7 +14,7 @@ function createProfileService({ sessionsRepository, usersRepository }) {
     },
 
     updatePassword(userId, newPassword) {
-      if (!isValidPassword(newPassword)) throw badRequest('Password must be at least 4 characters');
+      if (!isValidPassword(newPassword)) throw badRequest(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`);
       usersRepository.updatePassword(userId, bcrypt.hashSync(newPassword, 10));
       sessionsRepository.deleteByUserId(userId);
     },

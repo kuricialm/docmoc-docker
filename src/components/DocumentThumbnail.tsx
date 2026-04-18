@@ -1,16 +1,16 @@
 import { useEffect, useRef, useState, memo } from 'react';
 import * as api from '@/lib/api';
+import { SAFE_IMAGE_MIME_TYPES } from '@/lib/fileTypes';
 import FileTypeIcon from './FileTypeIcon';
 import { Skeleton } from '@/components/ui/skeleton';
 
-const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp', 'image/svg+xml'];
 const PDF_TYPE = 'application/pdf';
 
-// Simple in-memory cache: docId -> dataURL
+// Simple in-memory cache: docId -> preview URL
 const thumbCache = new Map<string, string>();
 
 function isPreviewable(fileType: string) {
-  return IMAGE_TYPES.includes(fileType) || fileType === PDF_TYPE;
+  return SAFE_IMAGE_MIME_TYPES.includes(fileType as (typeof SAFE_IMAGE_MIME_TYPES)[number]) || fileType === PDF_TYPE;
 }
 
 function clamp(min: number, value: number, max: number) {
@@ -63,8 +63,6 @@ export default memo(function DocumentThumbnail({ docId, fileType, enabled }: Pro
       return;
     }
 
-    let revoke: (() => void) | null = null;
-
     (async () => {
       try {
         const blob = await api.getDocumentBlob(docId);
@@ -75,7 +73,6 @@ export default memo(function DocumentThumbnail({ docId, fileType, enabled }: Pro
           url = await renderPdfThumb(blob);
         } else {
           url = URL.createObjectURL(blob);
-          revoke = () => URL.revokeObjectURL(url);
         }
 
         thumbCache.set(docId, url);

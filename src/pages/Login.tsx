@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 import { AlertCircle, FileText } from 'lucide-react';
+import { PASSWORD_MIN_LENGTH, PASSWORD_MIN_LENGTH_MESSAGE } from '@/lib/security';
 
 export default function Login() {
   const { signIn, appSettings } = useAuth();
@@ -51,8 +52,8 @@ export default function Login() {
       setFormError('Email is required.');
       return;
     }
-    if (password.length < 4) {
-      setFormError('Password must be at least 4 characters.');
+    if (password.length < PASSWORD_MIN_LENGTH) {
+      setFormError(PASSWORD_MIN_LENGTH_MESSAGE);
       return;
     }
     setLoading(true);
@@ -104,7 +105,7 @@ export default function Login() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="password" className="text-xs font-medium text-muted-foreground">Password</Label>
-              <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Enter your password" required minLength={4} className="h-10 rounded-lg bg-muted border-transparent focus-visible:border-border focus-visible:ring-0" />
+              <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Enter your password" required minLength={PASSWORD_MIN_LENGTH} className="h-10 rounded-lg bg-muted border-transparent focus-visible:border-border focus-visible:ring-0" />
             </div>
             {formError && (
               <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-destructive flex items-start gap-2 text-sm">

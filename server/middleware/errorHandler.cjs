@@ -1,3 +1,4 @@
+const multer = require('multer');
 const { ApiError } = require('../errors/apiError.cjs');
 
 function asyncHandler(fn) {
@@ -16,6 +17,16 @@ function errorHandler(err, _req, res, next) {
     res.status(err.status).json({
       error: err.message,
       ...err.payload,
+    });
+    return;
+  }
+
+  if (err instanceof multer.MulterError) {
+    const status = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
+    res.status(status).json({
+      error: err.code === 'LIMIT_FILE_SIZE'
+        ? 'Uploaded file exceeds the maximum allowed size'
+        : err.message || 'Upload failed',
     });
     return;
   }

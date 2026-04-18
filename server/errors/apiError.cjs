@@ -19,5 +19,6 @@ module.exports = {
   forbidden: (message, payload) => createError(403, message, payload),
   notFound: (message, payload) => createError(404, message, payload),
   payloadTooLarge: (message, payload) => createError(413, message, payload),
+  tooManyRequests: (message, payload) => createError(429, message, payload),
   unauthorized: (message, payload) => createError(401, message, payload),
 };

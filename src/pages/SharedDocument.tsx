@@ -10,6 +10,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import { hasArabicCharacters } from '@/lib/text';
 import { getUploadedByLabel } from '@/lib/documentMeta';
+import { PASSWORD_MIN_LENGTH } from '@/lib/security';
 import DocumentPreview from '@/components/DocumentPreview';
 import ThemeToggleButton from '@/components/ThemeToggleButton';
 
@@ -33,7 +34,9 @@ export default function SharedDocument() {
       setLoading(true);
     }
     try {
-      const shared = await api.getSharedDocument(token, password || undefined);
+      const shared = password
+        ? await api.unlockSharedDocument(token, password)
+        : await api.getSharedDocument(token);
       if (!shared) {
         setDoc(null);
         return;
@@ -47,7 +50,19 @@ export default function SharedDocument() {
           setPreviewUrl(null);
         }
       } else if (shared.file_type === 'application/pdf' || isImageType(shared.file_type)) {
-        setPreviewUrl(api.getSharedDocumentFileUrl(token, password || undefined));
+        const blob = await api.getSharedDocumentBlob(token, password || undefined);
+        if (blob) {
+          const url = URL.createObjectURL(blob);
+          setPreviewUrl((current) => {
+            if (current) URL.revokeObjectURL(current);
+            return url;
+          });
+        } else {
+          setPreviewUrl(null);
+        }
+        setTextContent(null);
+      } else {
+        setPreviewUrl(null);
         setTextContent(null);
       }
 
@@ -68,6 +83,10 @@ export default function SharedDocument() {
     void loadDocument();
   }, [loadDocument]);
 
+  useEffect(() => () => {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+  }, [previewUrl]);
+
   if (loading) return <div className="min-h-screen flex items-center justify-center"><p className="text-muted-foreground text-sm">Loading...</p></div>;
   if (requiresPassword) {
     return (
@@ -84,7 +103,7 @@ export default function SharedDocument() {
           )}
           <Button
             className="w-full"
-            disabled={!sharePassword || unlocking}
+            disabled={sharePassword.length < PASSWORD_MIN_LENGTH || unlocking}
             onClick={async () => {
               setSubmittedPassword(sharePassword);
               setUnlocking(true);

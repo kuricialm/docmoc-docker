@@ -4,6 +4,8 @@ const os = require('os');
 const path = require('path');
 const {
   discoverSummaryRecoveryPaths,
+  loadConfig,
+  parseAllowedOrigins,
   resolveProjectPaths,
 } = require('./index.cjs');
 
@@ -81,5 +83,30 @@ describe('discoverSummaryRecoveryPaths', () => {
     const resolved = discoverSummaryRecoveryPaths(homeDir, repoName, currentDatabasePath);
 
     expect(resolved).toEqual([legacyA, legacyB].sort((left, right) => left.localeCompare(right)));
+  });
+});
+
+describe('loadConfig', () => {
+  it('rejects placeholder secrets in production', () => {
+    expect(() => loadConfig({
+      AI_SECRETS_MASTER_KEY: 'change-me-for-ai-secrets',
+      COOKIE_SECRET: 'change-me-in-production',
+      NODE_ENV: 'production',
+      PORT: '3001',
+    })).toThrow(/must be set to a non-default value/);
+  });
+});
+
+describe('parseAllowedOrigins', () => {
+  it('adds local development origins automatically outside production', () => {
+    const origins = parseAllowedOrigins('', 'development');
+    expect(origins).toContain('http://localhost:8080');
+    expect(origins).toContain('http://127.0.0.1:3001');
+  });
+
+  it('keeps production origins explicit', () => {
+    expect(parseAllowedOrigins('https://docmoc.example.com', 'production')).toEqual([
+      'https://docmoc.example.com',
+    ]);
   });
 });

@@ -12,6 +12,7 @@ import { getDocumentHistoryLabel } from '@/lib/documentHistory';
 import { decodeDocumentPreviewText } from '@/lib/documentPreviewText';
 import { getFileTypeInfo, formatFileSize, isImageType } from '@/lib/fileTypes';
 import { getUploadedByLabel } from '@/lib/documentMeta';
+import { PASSWORD_MIN_LENGTH, PASSWORD_MIN_LENGTH_MESSAGE } from '@/lib/security';
 import { copyTextToClipboard, getSharedDocumentUrl } from '@/lib/share';
 import { hasArabicCharacters } from '@/lib/text';
 import { Button } from '@/components/ui/button';
@@ -317,7 +318,7 @@ function ShareDialog({
                 value={sharePassword}
                 onChange={(event) => onSharePasswordChange(event.target.value)}
                 placeholder="Leave blank for no password"
-                minLength={4}
+                minLength={PASSWORD_MIN_LENGTH}
               />
             </div>
           </div>
@@ -345,6 +346,7 @@ function useDocumentPreviewState(document: Document | null, open: boolean) {
     }
 
     let cancelled = false;
+    let objectUrl: string | null = null;
 
     const loadPreview = async () => {
       if (fileType === 'text/plain') {
@@ -362,7 +364,11 @@ function useDocumentPreviewState(document: Document | null, open: boolean) {
       }
 
       if (fileType === 'application/pdf' || isImageType(fileType)) {
-        setPreviewUrl(api.getDocumentFileUrl(documentId));
+        const blob = await api.getDocumentBlob(documentId);
+        if (!blob || cancelled) return;
+
+        objectUrl = URL.createObjectURL(blob);
+        setPreviewUrl(objectUrl);
         setTextContent(null);
         setTextIsArabic(false);
         return;
@@ -377,6 +383,7 @@ function useDocumentPreviewState(document: Document | null, open: boolean) {
 
     return () => {
       cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [documentId, fileType, open]);
 
@@ -632,8 +639,8 @@ export default function DocumentViewer({ document, open, onClose }: Props) {
   };
 
   const handleGenerateShareLink = async () => {
-    if (sharePassword && sharePassword.length < 4) {
-      toast.error('Password must be at least 4 characters');
+    if (sharePassword && sharePassword.length < PASSWORD_MIN_LENGTH) {
+      toast.error(PASSWORD_MIN_LENGTH_MESSAGE);
       return;
     }
 

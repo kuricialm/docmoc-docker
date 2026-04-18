@@ -23,6 +23,7 @@ COPY server.cjs ./
 COPY server ./server
 RUN mkdir -p /app/data
 EXPOSE 3001
+ENV NODE_ENV=production
 ENV DATA_DIR=/app/data
 ENV PORT=3001
 CMD ["node", "server.cjs"]

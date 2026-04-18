@@ -4,7 +4,7 @@ const ENCRYPTION_VERSION = 'v1';
 const IV_LENGTH = 12;
 
 function getMasterKey() {
-  const secret = process.env.AI_SECRETS_MASTER_KEY || process.env.COOKIE_SECRET || '';
+  const secret = process.env.AI_SECRETS_MASTER_KEY || '';
   if (!secret) {
     throw new Error('AI secrets storage is not configured');
   }

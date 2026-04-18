@@ -5,4 +5,8 @@ dist
 *.md
 .lovable
 .env
+.env.*
 data/
+coverage/
+output/playwright/
+.githooks/

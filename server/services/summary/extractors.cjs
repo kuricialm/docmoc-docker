@@ -1,6 +1,6 @@
 const fs = require('fs');
+const path = require('path');
 const mammoth = require('mammoth');
-const XLSX = require('xlsx');
 const JSZip = require('jszip');
 
 const ARABIC_REGEX = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/g;
@@ -98,33 +98,144 @@ async function extractDocxText(filePath) {
   return normalizeWhitespace(result?.value || '');
 }
 
-function extractXlsxText(filePath) {
-  const workbook = XLSX.readFile(filePath, {
-    dense: true,
-    cellHTML: false,
-    cellFormula: false,
-    cellNF: false,
-    cellStyles: false,
-    cellText: true,
-  });
+function parseXmlAttributes(tagSource) {
+  const attributes = {};
+  const attrRegex = /([A-Za-z_:][\w:.-]*)="([^"]*)"/g;
+  let match = attrRegex.exec(tagSource);
+  while (match) {
+    attributes[match[1]] = decodeXmlEntities(match[2] || '');
+    match = attrRegex.exec(tagSource);
+  }
+  return attributes;
+}
 
+function parseWorkbookRelationships(xml) {
+  const relationships = new Map();
+  const relationshipRegex = /<Relationship\b([^>]*)\/?>/g;
+  let match = relationshipRegex.exec(xml);
+  while (match) {
+    const attributes = parseXmlAttributes(match[1] || '');
+    if (attributes.Id && attributes.Target) {
+      relationships.set(
+        attributes.Id,
+        path.posix.normalize(path.posix.join('xl', attributes.Target)),
+      );
+    }
+    match = relationshipRegex.exec(xml);
+  }
+  return relationships;
+}
+
+function parseSharedStrings(xml) {
+  const values = [];
+  const sharedStringRegex = /<si\b[^>]*>([\s\S]*?)<\/si>/g;
+  let match = sharedStringRegex.exec(xml);
+  while (match) {
+    const textParts = [];
+    const textRegex = /<t\b[^>]*>([\s\S]*?)<\/t>/g;
+    let textMatch = textRegex.exec(match[1] || '');
+    while (textMatch) {
+      textParts.push(decodeXmlEntities(textMatch[1] || ''));
+      textMatch = textRegex.exec(match[1] || '');
+    }
+    values.push(textParts.join(''));
+    match = sharedStringRegex.exec(xml);
+  }
+  return values;
+}
+
+function columnLettersToIndex(cellReference) {
+  const letters = String(cellReference || '').match(/[A-Z]+/i)?.[0] || '';
+  let index = 0;
+  for (const letter of letters.toUpperCase()) {
+    index = index * 26 + (letter.charCodeAt(0) - 64);
+  }
+  return Math.max(0, index - 1);
+}
+
+function extractCellText(innerXml, attributes, sharedStrings) {
+  if (attributes.t === 'inlineStr') {
+    const inlineText = [];
+    const textRegex = /<t\b[^>]*>([\s\S]*?)<\/t>/g;
+    let textMatch = textRegex.exec(innerXml);
+    while (textMatch) {
+      inlineText.push(decodeXmlEntities(textMatch[1] || ''));
+      textMatch = textRegex.exec(innerXml);
+    }
+    return inlineText.join('');
+  }
+
+  const valueMatch = innerXml.match(/<v\b[^>]*>([\s\S]*?)<\/v>/);
+  const rawValue = decodeXmlEntities(valueMatch?.[1] || '');
+  if (!rawValue) return '';
+
+  if (attributes.t === 's') {
+    const index = Number.parseInt(rawValue, 10);
+    return Number.isFinite(index) ? (sharedStrings[index] || '') : '';
+  }
+
+  if (attributes.t === 'b') {
+    return rawValue === '1' ? 'TRUE' : 'FALSE';
+  }
+
+  return rawValue;
+}
+
+function extractSheetLines(xml, sharedStrings) {
+  const lines = [];
+  const rowRegex = /<row\b[^>]*>([\s\S]*?)<\/row>/g;
+  let rowMatch = rowRegex.exec(xml);
+  while (rowMatch) {
+    const rowValues = [];
+    const cellRegex = /<c\b([^>]*)>([\s\S]*?)<\/c>|<c\b([^>]*)\/>/g;
+    let cellMatch = cellRegex.exec(rowMatch[1] || '');
+    while (cellMatch) {
+      const attributes = parseXmlAttributes(cellMatch[1] || cellMatch[3] || '');
+      const columnIndex = columnLettersToIndex(attributes.r);
+      rowValues[columnIndex] = extractCellText(cellMatch[2] || '', attributes, sharedStrings);
+      cellMatch = cellRegex.exec(rowMatch[1] || '');
+    }
+
+    while (rowValues.length > 0 && !rowValues[rowValues.length - 1]) {
+      rowValues.pop();
+    }
+
+    const line = rowValues.join('\t').trim();
+    if (line) lines.push(line);
+    rowMatch = rowRegex.exec(xml);
+  }
+  return lines;
+}
+
+async function extractXlsxText(filePath) {
+  const archive = await JSZip.loadAsync(fs.readFileSync(filePath));
+  const workbookXml = await archive.file('xl/workbook.xml')?.async('string');
+  if (!workbookXml) return '';
+
+  const workbookRelsXml = await archive.file('xl/_rels/workbook.xml.rels')?.async('string');
+  const relationships = workbookRelsXml ? parseWorkbookRelationships(workbookRelsXml) : new Map();
+  const sharedStringsXml = await archive.file('xl/sharedStrings.xml')?.async('string');
+  const sharedStrings = sharedStringsXml ? parseSharedStrings(sharedStringsXml) : [];
   const sections = [];
 
-  for (const sheetName of workbook.SheetNames) {
-    const sheet = workbook.Sheets[sheetName];
-    if (!sheet) continue;
-    const rows = XLSX.utils.sheet_to_json(sheet, {
-      header: 1,
-      blankrows: false,
-      defval: '',
-      raw: false,
-    });
-    const lines = rows
-      .map((row) => (Array.isArray(row) ? row.join('\t').trim() : ''))
-      .filter(Boolean);
-    if (lines.length) {
-      sections.push(`Sheet: ${sheetName}\n${lines.join('\n')}`);
+  const sheetRegex = /<sheet\b([^>]*)\/>/g;
+  let sheetMatch = sheetRegex.exec(workbookXml);
+  while (sheetMatch) {
+    const attributes = parseXmlAttributes(sheetMatch[1] || '');
+    const targetPath = relationships.get(attributes['r:id'])
+      || `xl/worksheets/sheet${attributes.sheetId || sections.length + 1}.xml`;
+    const sheetXml = await archive.file(targetPath)?.async('string');
+    if (!sheetXml) {
+      sheetMatch = sheetRegex.exec(workbookXml);
+      continue;
     }
+
+    const lines = extractSheetLines(sheetXml, sharedStrings);
+    if (lines.length) {
+      sections.push(`Sheet: ${attributes.name || `Sheet ${sections.length + 1}`}\n${lines.join('\n')}`);
+    }
+
+    sheetMatch = sheetRegex.exec(workbookXml);
   }
 
   return normalizeWhitespace(sections.join('\n\n'));
@@ -193,7 +304,7 @@ async function extractDocumentInput(doc, filePath) {
     case 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
       return {
         mode: 'text',
-        content: extractXlsxText(filePath),
+        content: await extractXlsxText(filePath),
       };
 
     case 'application/vnd.openxmlformats-officedocument.presentationml.presentation':

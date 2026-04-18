@@ -2,6 +2,9 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
+const DEFAULT_MAX_BRANDING_UPLOAD_BYTES = 2 * 1024 * 1024;
+const DEFAULT_MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+
 function readTrimmedFile(filePath) {
   try {
     return fs.readFileSync(filePath, 'utf8').trim();
@@ -91,14 +94,71 @@ function resolveTrustProxySetting(rawValue, nodeEnv) {
   return rawValue;
 }
 
+function parsePositiveInteger(rawValue, fallbackValue, label) {
+  if (rawValue === undefined || rawValue === null || String(rawValue).trim() === '') {
+    return fallbackValue;
+  }
+
+  const parsed = Number.parseInt(String(rawValue).trim(), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error(`${label} must be a positive integer`);
+  }
+  return parsed;
+}
+
+function parseAllowedOrigins(rawValue, nodeEnv) {
+  const configuredOrigins = String(rawValue || '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .map((value) => new URL(value).origin);
+
+  if (nodeEnv !== 'production') {
+    configuredOrigins.push(
+      'http://localhost:3000',
+      'http://127.0.0.1:3000',
+      'http://localhost:3001',
+      'http://127.0.0.1:3001',
+      'http://localhost:8080',
+      'http://127.0.0.1:8080',
+    );
+  }
+
+  return [...new Set(configuredOrigins)];
+}
+
+function validateProductionConfig(config) {
+  if (config.nodeEnv !== 'production') return;
+
+  const placeholderValues = {
+    AI_SECRETS_MASTER_KEY: new Set(['', 'change-me-for-ai-secrets']),
+    ADMIN_PASSWORD: new Set(['', 'admin']),
+    COOKIE_SECRET: new Set(['', 'change-me-in-production', 'docmoc-secret-change-me']),
+  };
+
+  if (placeholderValues.ADMIN_PASSWORD.has(config.adminPassword)) {
+    throw new Error('ADMIN_PASSWORD must be set to a non-default value in production');
+  }
+
+  if (placeholderValues.COOKIE_SECRET.has(config.cookieSecret)) {
+    throw new Error('COOKIE_SECRET must be set to a non-default value in production');
+  }
+
+  if (placeholderValues.AI_SECRETS_MASTER_KEY.has(config.aiSecretsMasterKey)) {
+    throw new Error('AI_SECRETS_MASTER_KEY must be set to a non-default value in production');
+  }
+}
+
 function loadConfig(env = process.env) {
   const projectDir = path.resolve(__dirname, '../..');
   const resolvedPaths = resolveProjectPaths(projectDir, env);
   const nodeEnv = env.NODE_ENV || 'development';
 
-  return {
+  const config = {
+    aiSecretsMasterKey: typeof env.AI_SECRETS_MASTER_KEY === 'string' ? env.AI_SECRETS_MASTER_KEY.trim() : '',
     adminEmail: env.ADMIN_EMAIL || 'admin@docmoc.local',
     adminPassword: env.ADMIN_PASSWORD || 'admin',
+    allowedOrigins: parseAllowedOrigins(env.ALLOWED_ORIGINS, nodeEnv),
     aiProviderOpenRouter: 'openrouter',
     cookieDomain: env.COOKIE_DOMAIN || undefined,
     cookieSecret: env.COOKIE_SECRET || 'docmoc-secret-change-me',
@@ -106,7 +166,9 @@ function loadConfig(env = process.env) {
     currentDatabasePath: resolvedPaths.currentDatabasePath,
     dataDir: resolvedPaths.dataDir,
     distDir: resolvedPaths.distDir,
+    maxBrandingUploadBytes: parsePositiveInteger(env.MAX_BRANDING_UPLOAD_BYTES, DEFAULT_MAX_BRANDING_UPLOAD_BYTES, 'MAX_BRANDING_UPLOAD_BYTES'),
     maxConcurrentSummariesPerUser: parseInt(env.MAX_CONCURRENT_SUMMARIES_PER_USER || '2', 10),
+    maxUploadBytes: parsePositiveInteger(env.MAX_UPLOAD_BYTES, DEFAULT_MAX_UPLOAD_BYTES, 'MAX_UPLOAD_BYTES'),
     nodeEnv,
     port: parseInt(env.PORT || '3001', 10),
     projectDir: resolvedPaths.projectDir,
@@ -119,6 +181,9 @@ function loadConfig(env = process.env) {
     trustProxy: resolveTrustProxySetting(env.TRUST_PROXY, nodeEnv),
     uploadsDir: path.join(resolvedPaths.dataDir, 'uploads'),
   };
+
+  validateProductionConfig(config);
+  return config;
 }
 
 function getSessionCookieOptions(req, config, maxAge) {
@@ -149,7 +214,9 @@ module.exports = {
   discoverSummaryRecoveryPaths,
   getSessionCookieOptions,
   loadConfig,
+  parseAllowedOrigins,
   resolveCanonicalRepoRoot,
   resolveProjectPaths,
   resolveTrustProxySetting,
+  validateProductionConfig,
 };

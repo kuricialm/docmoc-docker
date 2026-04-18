@@ -11,6 +11,36 @@ node_modules
 dist
 dist-ssr
 *.local
+.env
+.env.*
+!.env.example
+
+# Runtime data and uploads
+data/
+uploads/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Local secrets and credentials
+*.pem
+*.key
+*.p12
+*.pfx
+*.kdbx
+
+# QA artifacts and temporary outputs
+coverage/
+tmp/
+temp/
+output/playwright/*.png
+output/playwright/*.jpg
+output/playwright/*.jpeg
+output/playwright/*.webp
+output/playwright/*.webm
+output/playwright/*.zip
 
 # Editor directories and files
 .vscode/*
@@ -22,5 +52,3 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-
-data/

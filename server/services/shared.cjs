@@ -1,5 +1,8 @@
 const bcrypt = require('bcryptjs');
+const { normalizeUploadedFilename } = require('../lib/fileMeta.cjs');
+const { isSafePreviewMimeType } = require('../lib/uploadPolicy.cjs');
 const { badRequest, notFound, unauthorized } = require('../errors/apiError.cjs');
+const { MIN_PASSWORD_LENGTH } = require('../validators/common.cjs');
 
 function createSharedService({
   documentFilesStorage,
@@ -52,6 +55,18 @@ function createSharedService({
       const doc = getActiveSharedDocument(shareToken);
       assertPassword(doc, suppliedPassword);
       return {
+        contentDispositionName: normalizeUploadedFilename(doc.name),
+        contentType: doc.file_type,
+        filePath: documentFilesStorage.getAbsolutePath(doc.storage_path),
+      };
+    },
+
+    getSharedBlob(shareToken, suppliedPassword) {
+      const doc = getActiveSharedDocument(shareToken);
+      assertPassword(doc, suppliedPassword);
+      return {
+        asAttachment: !isSafePreviewMimeType(doc.file_type),
+        contentDispositionName: normalizeUploadedFilename(doc.name),
         contentType: doc.file_type,
         filePath: documentFilesStorage.getAbsolutePath(doc.storage_path),
       };
@@ -95,8 +110,8 @@ function createSharedService({
 
       if (config && Object.prototype.hasOwnProperty.call(config, 'password')) {
         if (config.password) {
-          if (typeof config.password !== 'string' || config.password.length < 4) {
-            throw badRequest('Password must be at least 4 characters');
+          if (typeof config.password !== 'string' || config.password.length < MIN_PASSWORD_LENGTH) {
+            throw badRequest(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`);
           }
           sharePasswordHash = bcrypt.hashSync(config.password, 10);
           passwordAction = existing.share_password_hash ? 'share_password_changed' : 'share_password_added';

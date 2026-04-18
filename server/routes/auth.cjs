@@ -2,10 +2,10 @@ const express = require('express');
 const { getSessionCookieOptions } = require('../config/index.cjs');
 const { asyncHandler } = require('../middleware/errorHandler.cjs');
 
-function createAuthRoutes({ authMiddleware, authService, config }) {
+function createAuthRoutes({ authMiddleware, authService, config, rateLimiters }) {
   const router = express.Router();
 
-  router.post('/api/auth/login', asyncHandler(async (req, res) => {
+  router.post('/api/auth/login', rateLimiters.login, asyncHandler(async (req, res) => {
     const result = authService.login(req, {
       email: req.body?.email,
       password: req.body?.password,
@@ -31,7 +31,7 @@ function createAuthRoutes({ authMiddleware, authService, config }) {
     res.json(req.user);
   }));
 
-  router.post('/api/auth/register', asyncHandler(async (req, res) => {
+  router.post('/api/auth/register', rateLimiters.register, asyncHandler(async (req, res) => {
     const user = authService.register({
       email: req.body?.email,
       fullName: req.body?.fullName,

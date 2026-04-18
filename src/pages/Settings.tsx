@@ -18,6 +18,12 @@ import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  PASSWORD_MIN_LENGTH,
+  PASSWORD_MIN_LENGTH_MESSAGE,
+  SAFE_FAVICON_UPLOAD_ACCEPT,
+  SAFE_LOGO_UPLOAD_ACCEPT,
+} from '@/lib/security';
 
 const ACCENT_COLORS = ['#000000', '#3B82F6', '#6366F1', '#8B5CF6', '#EC4899', '#EF4444', '#F59E0B', '#22C55E', '#06B6D4'];
 
@@ -408,7 +414,7 @@ function BrandingSection({
           </div>
         )}
         <div className="flex items-center gap-2">
-          <input type="file" accept="image/*" onChange={onLogoUpload} className="hidden" id="logo-upload" />
+          <input type="file" accept={SAFE_LOGO_UPLOAD_ACCEPT} onChange={onLogoUpload} className="hidden" id="logo-upload" />
           <Button variant="outline" size="sm" className="rounded-lg" onClick={() => document.getElementById('logo-upload')?.click()} disabled={busyState.logoUpload}>
             {busyState.logoUpload ? 'Uploading...' : 'Upload Logo'}
           </Button>
@@ -426,7 +432,7 @@ function BrandingSection({
           </div>
         )}
         <div className="flex items-center gap-2">
-          <input type="file" accept="image/x-icon,image/png,image/svg+xml,image/*" onChange={onFaviconUpload} className="hidden" id="favicon-upload" />
+          <input type="file" accept={SAFE_FAVICON_UPLOAD_ACCEPT} onChange={onFaviconUpload} className="hidden" id="favicon-upload" />
           <Button variant="outline" size="sm" className="rounded-lg" onClick={() => document.getElementById('favicon-upload')?.click()} disabled={busyState.faviconUpload}>
             {busyState.faviconUpload ? 'Uploading...' : 'Upload Favicon'}
           </Button>
@@ -575,6 +581,10 @@ export default function SettingsPage() {
   const handlePasswordChange = async (event: FormEvent) => {
     event.preventDefault();
     if (!userId) return;
+    if (newPassword.length < PASSWORD_MIN_LENGTH) {
+      toast.error(PASSWORD_MIN_LENGTH_MESSAGE);
+      return;
+    }
 
     try {
       await runBusyAction('password', async () => {
@@ -883,7 +893,7 @@ export default function SettingsPage() {
           <form onSubmit={handlePasswordChange} className="space-y-3">
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">New Password</Label>
-              <Input type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} placeholder="Enter new password" required minLength={6} className="h-10 rounded-lg" />
+              <Input type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} placeholder="Enter new password" required minLength={PASSWORD_MIN_LENGTH} className="h-10 rounded-lg" />
             </div>
             <p className="text-xs text-muted-foreground">You will be signed out after changing your password.</p>
             <Button type="submit" size="sm" className="rounded-lg" disabled={busyState.password}>

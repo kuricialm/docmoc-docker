@@ -39,6 +39,7 @@ function extFromMime(mime) {
     'text/csv': 'csv',
     'image/png': 'png',
     'image/jpeg': 'jpg',
+    'image/jpg': 'jpg',
     'image/gif': 'gif',
     'image/webp': 'webp',
     'image/svg+xml': 'svg',

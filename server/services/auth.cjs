@@ -1,7 +1,7 @@
 const bcrypt = require('bcryptjs');
 const { getSessionCookieOptions } = require('../config/index.cjs');
 const { badRequest, forbidden, unauthorized } = require('../errors/apiError.cjs');
-const { isValidPassword, normalizeEmail } = require('../validators/common.cjs');
+const { isValidPassword, MIN_PASSWORD_LENGTH, normalizeEmail } = require('../validators/common.cjs');
 
 function createAuthService({
   brandingService,
@@ -95,7 +95,7 @@ function createAuthService({
 
       const normalizedEmail = normalizeEmail(email);
       if (!normalizedEmail) throw badRequest('Valid email is required');
-      if (!isValidPassword(password)) throw badRequest('Password must be at least 4 characters');
+      if (!isValidPassword(password)) throw badRequest(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`);
       if (usersRepository.getByEmail(normalizedEmail)) throw badRequest('Email already exists');
 
       const id = uid();

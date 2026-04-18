@@ -8,7 +8,7 @@ function createDocumentsRoutes({ authMiddleware, documentsService, openRouterSer
     res.json(documentsService.listDocuments(req.user, req.query || {}));
   }));
 
-  router.post('/api/documents/upload', authMiddleware.auth, uploadMiddleware.single('file'), asyncHandler(async (req, res) => {
+  router.post('/api/documents/upload', authMiddleware.auth, uploadMiddleware.documents.single('file'), asyncHandler(async (req, res) => {
     res.json(documentsService.uploadDocument(req.user, req.file));
   }));
 

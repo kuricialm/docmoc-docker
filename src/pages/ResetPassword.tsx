@@ -5,6 +5,7 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { FileText } from 'lucide-react';
+import { PASSWORD_MIN_LENGTH } from '@/lib/security';
 
 export default function ResetPassword() {
   const [password, setPassword] = useState('');
@@ -34,7 +35,7 @@ export default function ResetPassword() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="password" className="text-xs font-medium text-muted-foreground uppercase tracking-wider">New Password</Label>
-            <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Enter new password" required minLength={6} className="h-11" />
+            <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Enter new password" required minLength={PASSWORD_MIN_LENGTH} className="h-11" />
           </div>
           <Button type="submit" className="w-full h-11 font-medium" disabled={loading}>
             {loading ? 'Updating...' : 'Update Password'}

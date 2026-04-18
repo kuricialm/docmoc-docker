@@ -11,6 +11,14 @@ export const FILE_TYPE_CONFIG: Record<string, { label: string; color: string; bg
   'image/svg+xml': { label: 'SVG', color: 'hsl(271, 91%, 55%)', bgColor: 'hsl(271, 91%, 95%)' },
 };
 
+export const SAFE_IMAGE_MIME_TYPES = [
+  'image/png',
+  'image/jpeg',
+  'image/jpg',
+  'image/gif',
+  'image/webp',
+] as const;
+
 export const ACCEPTED_UPLOAD_MIME_TYPES = [
   'application/pdf',
   'text/plain',
@@ -18,12 +26,7 @@ export const ACCEPTED_UPLOAD_MIME_TYPES = [
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-  'image/png',
-  'image/jpeg',
-  'image/jpg',
-  'image/gif',
-  'image/webp',
-  'image/svg+xml',
+  ...SAFE_IMAGE_MIME_TYPES,
   'application/zip',
 ] as const;
 
@@ -39,7 +42,6 @@ export const ACCEPTED_UPLOAD_EXTENSIONS = [
   '.jpeg',
   '.gif',
   '.webp',
-  '.svg',
   '.zip',
 ] as const;
 
@@ -71,9 +73,11 @@ export function formatFileSize(bytes: number): string {
 }
 
 export function isPreviewable(mimeType: string): boolean {
-  return mimeType === 'application/pdf' || mimeType === 'text/plain' || mimeType.startsWith('image/');
+  return mimeType === 'application/pdf'
+    || mimeType === 'text/plain'
+    || SAFE_IMAGE_MIME_TYPES.includes(mimeType as (typeof SAFE_IMAGE_MIME_TYPES)[number]);
 }
 
 export function isImageType(mimeType: string): boolean {
-  return mimeType.startsWith('image/');
+  return SAFE_IMAGE_MIME_TYPES.includes(mimeType as (typeof SAFE_IMAGE_MIME_TYPES)[number]);
 }

@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { toast } from 'sonner';
 import { Plus, Edit2, Shield, User, KeyRound, Trash2 } from 'lucide-react';
 import { formatFileSize } from '@/lib/fileTypes';
+import { PASSWORD_MIN_LENGTH, PASSWORD_MIN_LENGTH_MESSAGE } from '@/lib/security';
 
 type UserProfile = {
   id: string;
@@ -74,8 +75,8 @@ export default function AdminPage() {
       toast.error('Email is required');
       return;
     }
-    if (invitePassword.length < 4) {
-      toast.error('Password must be at least 4 characters');
+    if (invitePassword.length < PASSWORD_MIN_LENGTH) {
+      toast.error(PASSWORD_MIN_LENGTH_MESSAGE);
       return;
     }
     setInviteLoading(true);
@@ -304,7 +305,7 @@ export default function AdminPage() {
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Password</Label>
-              <Input type="password" value={invitePassword} onChange={(e) => setInvitePassword(e.target.value)} required minLength={4} className="h-10 rounded-lg" />
+              <Input type="password" value={invitePassword} onChange={(e) => setInvitePassword(e.target.value)} required minLength={PASSWORD_MIN_LENGTH} className="h-10 rounded-lg" />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Role</Label>
@@ -386,12 +387,12 @@ export default function AdminPage() {
                 <Input
                   type="password"
                   value={passwordResetValue}
-                  minLength={4}
+                  minLength={PASSWORD_MIN_LENGTH}
                   onChange={(e) => setPasswordResetValue(e.target.value)}
                   placeholder="New password"
                   className="h-9 rounded-lg"
                 />
-                <Button type="button" variant="secondary" onClick={handlePasswordReset} disabled={passwordResetValue.length < 4} className="h-9 px-3">
+                <Button type="button" variant="secondary" onClick={handlePasswordReset} disabled={passwordResetValue.length < PASSWORD_MIN_LENGTH} className="h-9 px-3">
                   <KeyRound className="w-4 h-4 mr-1" /> Reset
                 </Button>
               </div>
