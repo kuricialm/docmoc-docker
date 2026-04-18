@@ -1,20 +1,106 @@
 import { useState } from 'react';
 import { useLocation, Link } from 'react-router-dom';
+import { useDroppable } from '@dnd-kit/core';
 import { useAuth } from '@/contexts/AuthContext';
+import { useDocumentDragContext } from '@/contexts/DocumentDragContext';
 import { useTags } from '@/hooks/useTags';
 import {
   FileText, Clock, Star, Share2, Trash2, Settings, Shield, ChevronLeft, Tags,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import {
+  getTagDropTargetId,
+  SIDEBAR_STARRED_DROP_TARGET_ID,
+  SIDEBAR_TRASH_DROP_TARGET_ID,
+} from '@/lib/documentDragDrop';
 import TagManager from './TagManager';
 
 const navItems = [
   { label: 'All Documents', icon: FileText, path: '/' },
   { label: 'Recent', icon: Clock, path: '/recent' },
-  { label: 'Starred', icon: Star, path: '/starred' },
+  { label: 'Starred', icon: Star, path: '/starred', dropTargetId: SIDEBAR_STARRED_DROP_TARGET_ID },
   { label: 'Shared by Me', icon: Share2, path: '/shared' },
-  { label: 'Trash', icon: Trash2, path: '/trash' },
+  { label: 'Trash', icon: Trash2, path: '/trash', dropTargetId: SIDEBAR_TRASH_DROP_TARGET_ID, destructive: true },
 ];
+
+type SidebarLinkProps = {
+  to: string;
+  label: string;
+  active: boolean;
+  collapsed: boolean;
+  onClick?: () => void;
+  title?: string;
+  icon?: typeof FileText;
+  dotColor?: string;
+  dropTargetId?: string;
+  destructive?: boolean;
+};
+
+function SidebarLinkItem({
+  to,
+  label,
+  active,
+  collapsed,
+  onClick,
+  title,
+  icon: Icon,
+  dotColor,
+  dropTargetId,
+  destructive = false,
+}: SidebarLinkProps) {
+  const { enabled, activeDocument, activeTargetId } = useDocumentDragContext();
+  const dropReady = Boolean(dropTargetId && enabled && activeDocument);
+  const { isOver, setNodeRef } = useDroppable({
+    id: dropTargetId || `sidebar:static:${to}`,
+    disabled: !dropReady,
+  });
+  const isDropActive = Boolean(dropTargetId && activeTargetId === dropTargetId && isOver);
+
+  const baseClasses = collapsed
+    ? 'justify-center px-0'
+    : dotColor
+      ? 'gap-2.5 py-1.5 px-2'
+      : 'gap-3 px-3 py-2';
+
+  const stateClasses = isDropActive
+    ? destructive
+      ? 'bg-destructive/12 text-destructive border-destructive/35'
+      : 'bg-primary/10 text-foreground border-primary/20'
+    : active
+      ? 'bg-muted text-foreground font-medium'
+      : 'text-muted-foreground hover:text-foreground hover:bg-muted';
+
+  const style = isDropActive && dotColor
+    ? {
+      backgroundColor: `${dotColor}1a`,
+      boxShadow: `inset 0 0 0 1px ${dotColor}55, 0 18px 32px -28px hsl(var(--foreground) / 0.55)`,
+      color: 'hsl(var(--foreground))',
+    }
+    : undefined;
+
+  return (
+    <Link
+      ref={setNodeRef}
+      to={to}
+      onClick={onClick}
+      className={cn(
+        'flex w-full items-center rounded-lg text-sm border border-transparent transition-all duration-150 sidebar-drop-target',
+        baseClasses,
+        stateClasses,
+        isDropActive && 'sidebar-drop-target-active',
+      )}
+      style={style}
+      title={title}
+    >
+      {Icon ? (
+        <Icon className="w-4 h-4 shrink-0" />
+      ) : (
+        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: dotColor }} />
+      )}
+      {!collapsed && <span className="truncate">{label}</span>}
+    </Link>
+  );
+}
 
 type SidebarProps = {
   collapsed: boolean;
@@ -76,22 +162,18 @@ export default function AppSidebar({
           {navItems.map((item) => {
             const active = location.pathname === item.path;
             return (
-              <Link
+              <SidebarLinkItem
                 key={item.path}
                 to={item.path}
+                label={item.label}
+                icon={item.icon}
+                active={active}
+                collapsed={collapsed}
                 onClick={() => isMobile && onMobileClose?.()}
-                className={cn(
-                  'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-150',
-                  active
-                    ? 'bg-muted text-foreground font-medium'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted',
-                  collapsed && 'justify-center px-0',
-                )}
                 title={collapsed ? item.label : undefined}
-              >
-                <item.icon className="w-4 h-4 shrink-0" />
-                {!collapsed && <span>{item.label}</span>}
-              </Link>
+                dropTargetId={item.dropTargetId}
+                destructive={item.destructive}
+              />
             );
           })}
 
@@ -111,18 +193,16 @@ export default function AppSidebar({
                 {tags?.map((tag) => {
                   const active = location.pathname === `/tag/${tag.id}`;
                   return (
-                    <Link
+                    <SidebarLinkItem
                       key={tag.id}
                       to={`/tag/${tag.id}`}
+                      label={tag.name}
+                      active={active}
+                      collapsed={false}
                       onClick={() => isMobile && onMobileClose?.()}
-                      className={cn(
-                        'flex items-center gap-2.5 py-1.5 px-2 text-sm transition-all duration-150 rounded-lg',
-                        active ? 'text-foreground font-medium bg-muted' : 'text-muted-foreground hover:text-foreground hover:bg-muted',
-                      )}
-                    >
-                      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: tag.color }} />
-                      <span className="truncate">{tag.name}</span>
-                    </Link>
+                      dotColor={tag.color}
+                      dropTargetId={getTagDropTargetId(tag.id)}
+                    />
                   );
                 })}
                 {(!tags || tags.length === 0) && (

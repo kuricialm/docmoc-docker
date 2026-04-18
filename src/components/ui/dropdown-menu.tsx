@@ -74,12 +74,14 @@ const DropdownMenuItem = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.Item>,
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Item> & {
     inset?: boolean;
+    destructive?: boolean;
   }
->(({ className, inset, ...props }, ref) => (
+>(({ className, destructive, inset, ...props }, ref) => (
   <DropdownMenuPrimitive.Item
     ref={ref}
     className={cn(
       "relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors data-[disabled]:pointer-events-none data-[disabled]:opacity-50 focus:bg-accent focus:text-accent-foreground",
+      destructive && "text-destructive data-[highlighted]:bg-destructive/12 data-[highlighted]:text-destructive focus:bg-destructive/12 focus:text-destructive dark:data-[highlighted]:bg-destructive/20 dark:data-[highlighted]:text-red-50 dark:focus:bg-destructive/20 dark:focus:text-red-50",
       inset && "pl-8",
       className,
     )}

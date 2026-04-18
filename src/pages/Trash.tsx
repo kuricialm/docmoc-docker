@@ -45,10 +45,10 @@ export default function TrashPage({ search }: Props) {
                     <RotateCcw className="w-3 h-3" /> <span className="hidden sm:inline">Restore</span>
                   </Button>
                   <Button
-                    variant="ghost"
+                    variant="ghostDestructive"
                     size="sm"
                     onClick={() => permanentDelete.mutate({ id: doc.id, storagePath: doc.storage_path })}
-                    className="gap-1.5 text-xs text-destructive rounded-lg h-8 px-2 sm:px-3"
+                    className="gap-1.5 text-xs rounded-lg h-8 px-2 sm:px-3"
                   >
                     <Trash2 className="w-3 h-3" /> <span className="hidden sm:inline">Delete</span>
                   </Button>

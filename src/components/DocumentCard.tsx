@@ -6,10 +6,10 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { hasArabicCharacters } from '@/lib/text';
-import FileTypeIcon from './FileTypeIcon';
 import DocumentThumbnail from './DocumentThumbnail';
 import { useLocalSettings } from '@/hooks/useLocalSettings';
 import { Badge } from '@/components/ui/badge';
+import { useDocumentDraggable } from '@/hooks/useDocumentDraggable';
 
 type Props = {
   document: Document;
@@ -23,11 +23,26 @@ export default function DocumentCard({ document: doc, onView, onRename, selected
   const { toggleStar, trashDocument, downloadDocument } = useDocumentMutations();
   const typeInfo = getFileTypeInfo(doc.file_type);
   const { settings } = useLocalSettings();
+  const { dragAttributes, dragListeners, dragRef, dragEnabled, isDragging } = useDocumentDraggable(doc);
+
+  const stopPointerPropagation = (event: React.PointerEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+  };
 
   return (
     <div
-      className="group file-card-hover bg-muted/40 rounded-xl overflow-hidden cursor-pointer touch-manipulation active:scale-[0.98] md:hover:bg-muted"
-      onClick={() => onView(doc)}
+      ref={dragRef}
+      {...dragAttributes}
+      {...dragListeners}
+      className={cn(
+        'group file-card-hover bg-muted/40 rounded-xl overflow-hidden cursor-pointer touch-manipulation active:scale-[0.98] md:hover:bg-muted',
+        dragEnabled && 'md:cursor-grab md:active:cursor-grabbing',
+        isDragging && 'opacity-45 scale-[0.98] shadow-none'
+      )}
+      onClick={(event) => {
+        if (event.defaultPrevented) return;
+        onView(doc);
+      }}
     >
       <div className="h-36 sm:h-40 bg-muted/60 flex items-center justify-center relative overflow-hidden">
         <DocumentThumbnail docId={doc.id} fileType={doc.file_type} enabled={settings.thumbnailPreviews} />
@@ -36,6 +51,7 @@ export default function DocumentCard({ document: doc, onView, onRename, selected
             e.stopPropagation();
             onToggleSelect?.(doc);
           }}
+          onPointerDown={stopPointerPropagation}
           className={cn(
             'absolute top-2.5 left-2.5 w-6 h-6 rounded-md border flex items-center justify-center transition-colors',
             selected ? 'bg-primary border-primary text-primary-foreground' : 'bg-background/80 border-border text-transparent hover:text-muted-foreground',
@@ -46,6 +62,7 @@ export default function DocumentCard({ document: doc, onView, onRename, selected
         </button>
         <button
           onClick={(e) => { e.stopPropagation(); toggleStar.mutate({ id: doc.id, starred: !doc.starred }); }}
+          onPointerDown={stopPointerPropagation}
           className={cn(
             'absolute top-2.5 right-2.5 p-1.5 rounded-lg transition-all duration-150',
             doc.starred ? 'text-amber-500' : 'text-muted-foreground/30 md:opacity-0 md:group-hover:opacity-100 hover:text-muted-foreground',
@@ -74,7 +91,7 @@ export default function DocumentCard({ document: doc, onView, onRename, selected
           </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-              <button className="p-1.5 rounded-lg hover:bg-muted md:opacity-0 md:group-hover:opacity-100 transition-all duration-150">
+              <button onPointerDown={stopPointerPropagation} className="p-1.5 rounded-lg hover:bg-muted md:opacity-0 md:group-hover:opacity-100 transition-all duration-150">
                 <MoreVertical className="w-4 h-4 text-muted-foreground" />
               </button>
             </DropdownMenuTrigger>
@@ -88,7 +105,7 @@ export default function DocumentCard({ document: doc, onView, onRename, selected
               <DropdownMenuItem onClick={(e) => { e.stopPropagation(); downloadDocument(doc.id, doc.name); }} className="gap-2">
                 <Download className="w-3.5 h-3.5" /> Download
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); trashDocument.mutate(doc.id); }} className="gap-2 text-destructive">
+              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); trashDocument.mutate(doc.id); }} className="gap-2" destructive>
                 <Trash2 className="w-3.5 h-3.5" /> Move to Trash
               </DropdownMenuItem>
             </DropdownMenuContent>

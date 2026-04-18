@@ -100,7 +100,7 @@ export default function TagView({ viewMode, onViewModeChange, search }: Props) {
           <>
             <h2 className="text-lg font-semibold">{tag.name}</h2>
             <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => { setEditing(true); setEditName(tag.name); }}><Edit2 className="w-3.5 h-3.5" /></Button>
-            <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={handleDelete}><Trash2 className="w-3.5 h-3.5" /></Button>
+            <Button size="icon" variant="ghostDestructive" className="h-7 w-7" onClick={handleDelete}><Trash2 className="w-3.5 h-3.5" /></Button>
           </>
         )}
       </div>

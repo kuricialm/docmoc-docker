@@ -65,7 +65,7 @@ export default function TopBar({ search, onSearchChange, onUpload, onMenuToggle,
               Settings
             </DropdownMenuItem>
             <DropdownMenuSeparator className="my-1" />
-            <DropdownMenuItem onClick={signOut} className="gap-2 text-destructive rounded-lg">
+            <DropdownMenuItem onClick={signOut} className="gap-2 rounded-lg" destructive>
               <LogOut className="w-4 h-4" />
               Sign Out
             </DropdownMenuItem>

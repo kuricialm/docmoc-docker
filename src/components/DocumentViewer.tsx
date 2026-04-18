@@ -679,10 +679,7 @@ export default function DocumentViewer({ document, open, onClose }: Props) {
   return (
     <>
       <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
-        <DialogContent
-          className="w-[96vw] max-w-5xl h-[95vh] sm:h-[82vh] flex flex-col p-0 gap-0 rounded-xl border-border/50 shadow-xl"
-          onInteractOutside={(event) => event.preventDefault()}
-        >
+        <DialogContent className="w-[96vw] max-w-5xl h-[95vh] sm:h-[82vh] flex flex-col p-0 gap-0 rounded-xl border-border/50 shadow-xl">
           <DialogHeader className="px-4 sm:px-6 py-4 border-b border-border/40 shrink-0">
             <div className="flex items-center gap-3">
               <button type="button" onClick={handleToggleStar} className="p-1.5 rounded-lg hover:bg-secondary transition-all duration-150" aria-label={optimisticStarred ? 'Unstar document' : 'Star document'}>

@@ -8,6 +8,7 @@ import FileTypeIcon from './FileTypeIcon';
 import { cn } from '@/lib/utils';
 import { hasArabicCharacters } from '@/lib/text';
 import { Badge } from '@/components/ui/badge';
+import { useDocumentDraggable } from '@/hooks/useDocumentDraggable';
 
 type Props = {
   documents: Document[];
@@ -17,8 +18,165 @@ type Props = {
   onToggleSelect?: (doc: Document) => void;
 };
 
+type SharedRowProps = {
+  document: Document;
+  selected: boolean;
+  onView: (doc: Document) => void;
+  onRename: (doc: Document) => void;
+  onToggleSelect?: (doc: Document) => void;
+  actions: ReturnType<typeof useDocumentMutations>;
+};
+
+function DesktopDocumentRow({ document: doc, selected, onView, onRename, onToggleSelect, actions }: SharedRowProps) {
+  const typeInfo = getFileTypeInfo(doc.file_type);
+  const { toggleStar, trashDocument, downloadDocument } = actions;
+  const { dragAttributes, dragListeners, dragRef, dragEnabled, isDragging } = useDocumentDraggable(doc);
+
+  return (
+    <tr
+      ref={dragRef}
+      {...dragAttributes}
+      {...dragListeners}
+      className={cn(
+        'border-b border-border/30 last:border-b-0 cursor-pointer group hover:bg-secondary/30 transition-colors duration-150',
+        dragEnabled && 'md:cursor-grab md:active:cursor-grabbing',
+        isDragging && 'opacity-40'
+      )}
+      onClick={(event) => {
+        if (event.defaultPrevented) return;
+        onView(doc);
+      }}
+    >
+      <td className="py-3 px-2">
+        <button
+          onClick={(e) => { e.stopPropagation(); onToggleSelect?.(doc); }}
+          onPointerDown={(event) => event.stopPropagation()}
+          className={cn(
+            'w-5 h-5 rounded border flex items-center justify-center',
+            selected ? 'bg-primary border-primary text-primary-foreground' : 'text-transparent border-border hover:text-muted-foreground',
+          )}
+        >
+          <Check className="w-3 h-3" />
+        </button>
+      </td>
+      <td className="py-3 px-4">
+        <div className="flex items-center gap-3">
+          <FileTypeIcon fileType={doc.file_type} size="sm" />
+          <span className={cn('font-medium truncate max-w-[200px]', hasArabicCharacters(doc.name) && 'font-arabic-text')}>
+            {doc.name}
+          </span>
+          <button
+            onClick={(e) => { e.stopPropagation(); toggleStar.mutate({ id: doc.id, starred: !doc.starred }); }}
+            onPointerDown={(event) => event.stopPropagation()}
+            className={cn('shrink-0 transition-all duration-150', doc.starred ? 'text-amber-400' : 'text-muted-foreground/20 opacity-0 group-hover:opacity-100')}
+          >
+            <Star className="w-3.5 h-3.5" fill={doc.starred ? 'currentColor' : 'none'} />
+          </button>
+        </div>
+      </td>
+      <td className="py-3 px-4">
+        <Badge
+          variant="secondary"
+          className="text-[10px] font-semibold px-1.5 py-0 h-5 rounded-md border-0"
+          style={{ color: typeInfo.color, backgroundColor: typeInfo.bgColor }}
+        >
+          {typeInfo.label}
+        </Badge>
+      </td>
+      <td className="py-3 px-4 text-muted-foreground">{formatFileSize(doc.file_size)}</td>
+      <td className="py-3 px-4 text-muted-foreground hidden lg:table-cell">
+        {new Date(doc.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+      </td>
+      <td className="py-3 px-4 hidden lg:table-cell">
+        <div className="flex gap-1">
+          {doc.tags?.slice(0, 3).map((tag) => (
+            <span key={tag.id} className="text-[10px] px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: tag.color + '18', color: tag.color }}>
+              {tag.name}
+            </span>
+          ))}
+        </div>
+      </td>
+      <td className="py-3 px-2">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+            <button onPointerDown={(event) => event.stopPropagation()} className="p-1.5 rounded-lg hover:bg-secondary opacity-0 group-hover:opacity-100 transition-all duration-150">
+              <MoreVertical className="w-4 h-4 text-muted-foreground" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-44">
+            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onView(doc); }} className="gap-2"><Eye className="w-3.5 h-3.5" /> View</DropdownMenuItem>
+            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onRename(doc); }} className="gap-2"><Edit2 className="w-3.5 h-3.5" /> Rename</DropdownMenuItem>
+            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); downloadDocument(doc.id, doc.name); }} className="gap-2"><Download className="w-3.5 h-3.5" /> Download</DropdownMenuItem>
+            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); trashDocument.mutate(doc.id); }} className="gap-2" destructive><Trash2 className="w-3.5 h-3.5" /> Move to Trash</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </td>
+    </tr>
+  );
+}
+
+function MobileDocumentRow({ document: doc, selected, onView, onRename, onToggleSelect, actions }: SharedRowProps) {
+  const typeInfo = getFileTypeInfo(doc.file_type);
+  const { toggleStar, trashDocument, downloadDocument } = actions;
+
+  return (
+    <div
+      key={doc.id}
+      className="file-card-hover bg-card border border-border/50 rounded-xl p-3.5 flex items-center gap-3 active:scale-[0.98] cursor-pointer"
+      onClick={() => onView(doc)}
+    >
+      <button
+        onClick={(e) => { e.stopPropagation(); onToggleSelect?.(doc); }}
+        onPointerDown={(event) => event.stopPropagation()}
+        className={cn(
+          'w-5 h-5 rounded border flex items-center justify-center shrink-0',
+          selected ? 'bg-primary border-primary text-primary-foreground' : 'text-transparent border-border hover:text-muted-foreground',
+        )}
+      >
+        <Check className="w-3 h-3" />
+      </button>
+      <FileTypeIcon fileType={doc.file_type} size="sm" />
+      <div className="flex-1 min-w-0">
+        <p className={cn('text-sm font-medium truncate', hasArabicCharacters(doc.name) && 'font-arabic-text')}>
+          {doc.name}
+        </p>
+        <div className="flex items-center gap-2 mt-0.5">
+          <Badge
+            variant="secondary"
+            className="text-[10px] font-semibold px-1.5 py-0 h-5 rounded-md border-0"
+            style={{ color: typeInfo.color, backgroundColor: typeInfo.bgColor }}
+          >
+            {typeInfo.label}
+          </Badge>
+          <span className="text-[11px] text-muted-foreground">{formatFileSize(doc.file_size)}</span>
+        </div>
+      </div>
+      <button
+        onClick={(e) => { e.stopPropagation(); toggleStar.mutate({ id: doc.id, starred: !doc.starred }); }}
+        onPointerDown={(event) => event.stopPropagation()}
+        className={cn('shrink-0 p-1', doc.starred ? 'text-amber-400' : 'text-muted-foreground/30')}
+      >
+        <Star className="w-4 h-4" fill={doc.starred ? 'currentColor' : 'none'} />
+      </button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+          <button onPointerDown={(event) => event.stopPropagation()} className="p-1 shrink-0">
+            <MoreVertical className="w-4 h-4 text-muted-foreground" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-44">
+          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onView(doc); }} className="gap-2"><Eye className="w-3.5 h-3.5" /> View</DropdownMenuItem>
+          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onRename(doc); }} className="gap-2"><Edit2 className="w-3.5 h-3.5" /> Rename</DropdownMenuItem>
+          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); downloadDocument(doc.id, doc.name); }} className="gap-2"><Download className="w-3.5 h-3.5" /> Download</DropdownMenuItem>
+          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); trashDocument.mutate(doc.id); }} className="gap-2" destructive><Trash2 className="w-3.5 h-3.5" /> Move to Trash</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+}
+
 export default function DocumentListView({ documents, onView, onRename, selectedIds, onToggleSelect }: Props) {
-  const { toggleStar, trashDocument, downloadDocument } = useDocumentMutations();
+  const actions = useDocumentMutations();
 
   return (
     <>
@@ -36,141 +194,33 @@ export default function DocumentListView({ documents, onView, onRename, selected
             </tr>
           </thead>
           <tbody>
-            {documents.map((doc) => {
-              const typeInfo = getFileTypeInfo(doc.file_type);
-              const selected = selectedIds?.has(doc.id) || false;
-              return (
-                <tr
-                  key={doc.id}
-                  className="border-b border-border/30 last:border-b-0 cursor-pointer group hover:bg-secondary/30 transition-colors duration-150"
-                  onClick={() => onView(doc)}
-                >
-                  <td className="py-3 px-2">
-                    <button
-                      onClick={(e) => { e.stopPropagation(); onToggleSelect?.(doc); }}
-                      className={cn(
-                        'w-5 h-5 rounded border flex items-center justify-center',
-                        selected ? 'bg-primary border-primary text-primary-foreground' : 'text-transparent border-border hover:text-muted-foreground',
-                      )}
-                    >
-                      <Check className="w-3 h-3" />
-                    </button>
-                  </td>
-                  <td className="py-3 px-4">
-                    <div className="flex items-center gap-3">
-                      <FileTypeIcon fileType={doc.file_type} size="sm" />
-                      <span className={cn('font-medium truncate max-w-[200px]', hasArabicCharacters(doc.name) && 'font-arabic-text')}>
-                        {doc.name}
-                      </span>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); toggleStar.mutate({ id: doc.id, starred: !doc.starred }); }}
-                        className={cn('shrink-0 transition-all duration-150', doc.starred ? 'text-amber-400' : 'text-muted-foreground/20 opacity-0 group-hover:opacity-100')}
-                      >
-                        <Star className="w-3.5 h-3.5" fill={doc.starred ? 'currentColor' : 'none'} />
-                      </button>
-                    </div>
-                  </td>
-                  <td className="py-3 px-4">
-                    <Badge
-                      variant="secondary"
-                      className="text-[10px] font-semibold px-1.5 py-0 h-5 rounded-md border-0"
-                      style={{ color: typeInfo.color, backgroundColor: typeInfo.bgColor }}
-                    >
-                      {typeInfo.label}
-                    </Badge>
-                  </td>
-                  <td className="py-3 px-4 text-muted-foreground">{formatFileSize(doc.file_size)}</td>
-                  <td className="py-3 px-4 text-muted-foreground hidden lg:table-cell">
-                    {new Date(doc.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                  </td>
-                  <td className="py-3 px-4 hidden lg:table-cell">
-                    <div className="flex gap-1">
-                      {doc.tags?.slice(0, 3).map((tag) => (
-                        <span key={tag.id} className="text-[10px] px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: tag.color + '18', color: tag.color }}>
-                          {tag.name}
-                        </span>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="py-3 px-2">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                        <button className="p-1.5 rounded-lg hover:bg-secondary opacity-0 group-hover:opacity-100 transition-all duration-150">
-                          <MoreVertical className="w-4 h-4 text-muted-foreground" />
-                        </button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-44">
-                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onView(doc); }} className="gap-2"><Eye className="w-3.5 h-3.5" /> View</DropdownMenuItem>
-                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onRename(doc); }} className="gap-2"><Edit2 className="w-3.5 h-3.5" /> Rename</DropdownMenuItem>
-                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); downloadDocument(doc.id, doc.name); }} className="gap-2"><Download className="w-3.5 h-3.5" /> Download</DropdownMenuItem>
-                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); trashDocument.mutate(doc.id); }} className="gap-2 text-destructive"><Trash2 className="w-3.5 h-3.5" /> Move to Trash</DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </td>
-                </tr>
-              );
-            })}
+            {documents.map((doc) => (
+              <DesktopDocumentRow
+                key={doc.id}
+                document={doc}
+                selected={selectedIds?.has(doc.id) || false}
+                onView={onView}
+                onRename={onRename}
+                onToggleSelect={onToggleSelect}
+                actions={actions}
+              />
+            ))}
           </tbody>
         </table>
       </div>
 
       <div className="md:hidden space-y-2">
-        {documents.map((doc) => {
-          const typeInfo = getFileTypeInfo(doc.file_type);
-          const selected = selectedIds?.has(doc.id) || false;
-          return (
-            <div
-              key={doc.id}
-              className="file-card-hover bg-card border border-border/50 rounded-xl p-3.5 flex items-center gap-3 active:scale-[0.98] cursor-pointer"
-              onClick={() => onView(doc)}
-            >
-              <button
-                onClick={(e) => { e.stopPropagation(); onToggleSelect?.(doc); }}
-                className={cn(
-                  'w-5 h-5 rounded border flex items-center justify-center shrink-0',
-                  selected ? 'bg-primary border-primary text-primary-foreground' : 'text-transparent border-border hover:text-muted-foreground',
-                )}
-              >
-                <Check className="w-3 h-3" />
-              </button>
-              <FileTypeIcon fileType={doc.file_type} size="sm" />
-              <div className="flex-1 min-w-0">
-                <p className={cn('text-sm font-medium truncate', hasArabicCharacters(doc.name) && 'font-arabic-text')}>
-                  {doc.name}
-                </p>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <Badge
-                    variant="secondary"
-                    className="text-[10px] font-semibold px-1.5 py-0 h-5 rounded-md border-0"
-                    style={{ color: typeInfo.color, backgroundColor: typeInfo.bgColor }}
-                  >
-                    {typeInfo.label}
-                  </Badge>
-                  <span className="text-[11px] text-muted-foreground">{formatFileSize(doc.file_size)}</span>
-                </div>
-              </div>
-              <button
-                onClick={(e) => { e.stopPropagation(); toggleStar.mutate({ id: doc.id, starred: !doc.starred }); }}
-                className={cn('shrink-0 p-1', doc.starred ? 'text-amber-400' : 'text-muted-foreground/30')}
-              >
-                <Star className="w-4 h-4" fill={doc.starred ? 'currentColor' : 'none'} />
-              </button>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                  <button className="p-1 shrink-0">
-                    <MoreVertical className="w-4 h-4 text-muted-foreground" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-44">
-                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onView(doc); }} className="gap-2"><Eye className="w-3.5 h-3.5" /> View</DropdownMenuItem>
-                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onRename(doc); }} className="gap-2"><Edit2 className="w-3.5 h-3.5" /> Rename</DropdownMenuItem>
-                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); downloadDocument(doc.id, doc.name); }} className="gap-2"><Download className="w-3.5 h-3.5" /> Download</DropdownMenuItem>
-                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); trashDocument.mutate(doc.id); }} className="gap-2 text-destructive"><Trash2 className="w-3.5 h-3.5" /> Move to Trash</DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          );
-        })}
+        {documents.map((doc) => (
+          <MobileDocumentRow
+            key={doc.id}
+            document={doc}
+            selected={selectedIds?.has(doc.id) || false}
+            onView={onView}
+            onRename={onRename}
+            onToggleSelect={onToggleSelect}
+            actions={actions}
+          />
+        ))}
       </div>
     </>
   );

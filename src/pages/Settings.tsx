@@ -154,8 +154,8 @@ function OpenRouterSection({
                   <Button
                     type="button"
                     size="sm"
-                    variant="ghost"
-                    className="rounded-lg text-destructive hover:text-destructive"
+                    variant="ghostDestructive"
+                    className="rounded-lg"
                     onClick={onRemoveKey}
                     disabled={busyState.openRouterRemoveKey}
                   >
