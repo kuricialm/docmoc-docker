@@ -17,7 +17,7 @@ export function useTags() {
     queryKey: ['tags', user?.id],
     queryFn: async () => {
       if (!user) return [];
-      return (await api.getTags(user.id)) as Tag[];
+      return (await api.getTags()) as Tag[];
     },
     enabled: !!user,
   });
@@ -35,7 +35,7 @@ export function useTagMutations() {
   const createTag = useMutation({
     mutationFn: async ({ name, color }: { name: string; color: string }) => {
       if (!user) throw new Error('Not authenticated');
-      await api.createTag(user.id, name, color);
+      await api.createTag(name, color);
     },
     onSuccess: () => { invalidate(); toast.success('Tag created'); },
     onError: (e: Error) => toast.error(e.message),

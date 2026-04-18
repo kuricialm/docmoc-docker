@@ -67,6 +67,12 @@ export type AppSettings = {
   workspace_favicon_url?: string | null;
 };
 
+export const DEFAULT_APP_SETTINGS: AppSettings = {
+  registration_enabled: true,
+  workspace_logo_url: null,
+  workspace_favicon_url: null,
+};
+
 export type OpenRouterModelOption = {
   id: string;
   name: string;
@@ -158,6 +164,11 @@ const BASE = RAW_API_BASE
   : '/api';
 
 type JsonRecord = Record<string, unknown>;
+type DocumentWithTags = DocRecord & { tags: TagRecord[] };
+type UploadedDocument = DocumentWithTags & { summary_auto_started?: boolean };
+type SessionResponse = {
+  user: ApiUser | null;
+};
 
 type ApiUser = {
   id: string;
@@ -271,22 +282,18 @@ export async function signOut(): Promise<void> {
 }
 
 export async function getCurrentUser(): Promise<User | null> {
-  try {
-    const u = await apiFetch<ApiUser>('/auth/me');
-    return mapUser(u);
-  } catch {
-    return null;
-  }
+  const session = await apiFetch<SessionResponse>('/auth/session');
+  return session.user ? mapUser(session.user) : null;
 }
 
-export async function updatePassword(_userId: string, newPassword: string): Promise<void> {
+export async function updatePassword(newPassword: string): Promise<void> {
   await apiFetch('/profile/password', {
     method: 'PATCH',
     body: JSON.stringify({ newPassword }),
   });
 }
 
-export async function updateEmail(_userId: string, email: string): Promise<void> {
+export async function updateEmail(email: string): Promise<void> {
   await apiFetch('/profile/email', {
     method: 'PATCH',
     body: JSON.stringify({ email }),
@@ -314,13 +321,6 @@ export async function getUsers(): Promise<User[]> {
   return users.map(mapUser);
 }
 
-export async function updateUserRole(userId: string, role: 'admin' | 'user'): Promise<void> {
-  await apiFetch(`/users/${userId}/role`, {
-    method: 'PATCH',
-    body: JSON.stringify({ role }),
-  });
-}
-
 export async function updateUser(
   userId: string,
   data: Partial<Pick<User, 'fullName' | 'email' | 'role' | 'suspended' | 'uploadQuotaBytes'>>
@@ -344,7 +344,7 @@ export async function deleteUser(userId: string): Promise<void> {
   });
 }
 
-export async function updateProfile(userId: string, data: Partial<Pick<User, 'accentColor' | 'workspaceLogoUrl' | 'fullName'>>): Promise<User> {
+export async function updateProfile(data: Partial<Pick<User, 'accentColor' | 'workspaceLogoUrl' | 'fullName'>>): Promise<User> {
   const u = await apiFetch<ApiUser>('/profile', {
     method: 'PATCH',
     body: JSON.stringify(data),
@@ -352,13 +352,8 @@ export async function updateProfile(userId: string, data: Partial<Pick<User, 'ac
   return mapUser(u);
 }
 
-export async function getProfile(_userId: string): Promise<User | null> {
-  try {
-    const u = await apiFetch<ApiUser>('/auth/me');
-    return mapUser(u);
-  } catch {
-    return null;
-  }
+export async function getProfile(): Promise<User | null> {
+  return getCurrentUser();
 }
 
 // ---------- Settings ----------
@@ -437,6 +432,18 @@ export type DocFilter = {
   sortBy?: 'updated' | 'created';
 };
 
+function buildDocumentQuery(filter?: DocFilter): string {
+  const params = new URLSearchParams();
+  if (filter?.trashed !== undefined) params.set('trashed', String(filter.trashed));
+  if (filter?.starred) params.set('starred', 'true');
+  if (filter?.shared) params.set('shared', 'true');
+  if (filter?.tagId) params.set('tagId', filter.tagId);
+  if (filter?.recent) params.set('recent', 'true');
+  if (filter?.recentLimit !== undefined) params.set('recentLimit', String(filter.recentLimit));
+  if (filter?.sortBy) params.set('sortBy', filter.sortBy);
+  return params.toString();
+}
+
 async function uploadFile(path: string, file: File, fallbackErrorMessage: string): Promise<unknown> {
   const formData = new FormData();
   formData.append('file', file);
@@ -455,22 +462,15 @@ async function uploadFile(path: string, file: File, fallbackErrorMessage: string
   return body;
 }
 
-export async function uploadDocument(_userId: string, file: File): Promise<DocRecord & { tags: TagRecord[]; summary_auto_started?: boolean }> {
+export async function uploadDocument(file: File): Promise<UploadedDocument> {
   const body = await uploadFile('/documents/upload', file, 'Upload failed');
   if (!body) throw new Error('Upload failed: empty response from API');
-  return body as DocRecord & { tags: TagRecord[]; summary_auto_started?: boolean };
+  return body as UploadedDocument;
 }
 
-export async function getDocuments(_userId: string, filter?: DocFilter): Promise<(DocRecord & { tags: TagRecord[] })[]> {
-  const params = new URLSearchParams();
-  if (filter?.trashed !== undefined) params.set('trashed', String(filter.trashed));
-  if (filter?.starred) params.set('starred', 'true');
-  if (filter?.shared) params.set('shared', 'true');
-  if (filter?.tagId) params.set('tagId', filter.tagId);
-  if (filter?.recent) params.set('recent', 'true');
-  if (filter?.recentLimit !== undefined) params.set('recentLimit', String(filter.recentLimit));
-  if (filter?.sortBy) params.set('sortBy', filter.sortBy);
-  return apiFetch(`/documents?${params.toString()}`);
+export async function getDocuments(filter?: DocFilter): Promise<DocumentWithTags[]> {
+  const query = buildDocumentQuery(filter);
+  return apiFetch(`/documents${query ? `?${query}` : ''}`);
 }
 
 export async function renameDocument(id: string, name: string): Promise<void> {
@@ -541,7 +541,7 @@ export async function getDocumentBlob(docId: string): Promise<Blob | undefined> 
   }
 }
 
-export async function getSharedDocument(token: string, password?: string): Promise<(DocRecord & { tags: TagRecord[] }) | null> {
+export async function getSharedDocument(token: string, password?: string): Promise<DocumentWithTags | null> {
   const suffix = password ? `?password=${encodeURIComponent(password)}` : '';
   let res: Response;
   try {
@@ -552,7 +552,7 @@ export async function getSharedDocument(token: string, password?: string): Promi
   if (res.status === 401) throw new Error('PASSWORD_REQUIRED');
   if (!res.ok) return null;
   const body = await readJsonBody(res);
-  return body as (DocRecord & { tags: TagRecord[] }) | null;
+  return body as DocumentWithTags | null;
 }
 
 export function getSharedDocumentFileUrl(token: string, password?: string): string {
@@ -588,11 +588,11 @@ export async function generateDocumentSummary(documentId: string, force = false)
 }
 
 // ---------- Tags ----------
-export async function getTags(userId: string): Promise<TagRecord[]> {
+export async function getTags(): Promise<TagRecord[]> {
   return apiFetch('/tags');
 }
 
-export async function createTag(_userId: string, name: string, color: string): Promise<TagRecord> {
+export async function createTag(name: string, color: string): Promise<TagRecord> {
   return apiFetch('/tags', {
     method: 'POST',
     body: JSON.stringify({ name, color }),
@@ -619,11 +619,11 @@ export async function removeTagFromDocument(documentId: string, tagId: string): 
 }
 
 // ---------- Notes ----------
-export async function getNote(documentId: string, _userId: string): Promise<NoteRecord | null> {
+export async function getNote(documentId: string): Promise<NoteRecord | null> {
   return apiFetch(`/documents/${documentId}/note`);
 }
 
-export async function upsertNote(documentId: string, _userId: string, content: string): Promise<void> {
+export async function upsertNote(documentId: string, content: string): Promise<void> {
   await apiFetch(`/documents/${documentId}/note`, {
     method: 'PUT',
     body: JSON.stringify({ content }),
@@ -631,25 +631,25 @@ export async function upsertNote(documentId: string, _userId: string, content: s
 }
 
 // ---------- Logo upload ----------
-export async function uploadLogo(_userId: string, file: File): Promise<string> {
+export async function uploadLogo(file: File): Promise<string> {
   const data = await uploadFile('/profile/logo', file, 'Logo upload failed');
   if (!isRecord(data) || typeof data.url !== 'string' || !data.url) throw new Error('Logo upload failed: empty response from API');
   return data.url;
 }
 
-export async function removeLogo(_userId: string): Promise<void> {
+export async function removeLogo(): Promise<void> {
   await apiFetch('/profile/logo', {
     method: 'DELETE',
   });
 }
 
-export async function uploadFavicon(_userId: string, file: File): Promise<string> {
+export async function uploadFavicon(file: File): Promise<string> {
   const data = await uploadFile('/profile/favicon', file, 'Favicon upload failed');
   if (!isRecord(data) || typeof data.url !== 'string' || !data.url) throw new Error('Favicon upload failed: empty response from API');
   return data.url;
 }
 
-export async function removeFavicon(_userId: string): Promise<void> {
+export async function removeFavicon(): Promise<void> {
   await apiFetch('/profile/favicon', {
     method: 'DELETE',
   });

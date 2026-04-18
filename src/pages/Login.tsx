@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import * as api from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
+import { getErrorMessage } from '@/lib/errors';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -28,8 +29,8 @@ export default function Login() {
     setLoading(true);
     try {
       await signIn(email, password, rememberMe);
-    } catch (err: any) {
-      const message = err?.message || 'Unable to sign in.';
+    } catch (error) {
+      const message = getErrorMessage(error, 'Unable to sign in.');
       if (message === 'Invalid email or password') {
         setFormError('The password you entered is incorrect. Please try again.');
       } else {
@@ -62,8 +63,8 @@ export default function Login() {
       setFullName('');
       setPassword('');
       setFormError('');
-    } catch (err: any) {
-      setFormError(err?.message || 'Unable to create account.');
+    } catch (error) {
+      setFormError(getErrorMessage(error, 'Unable to create account.'));
     }
     setLoading(false);
   };

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import * as api from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
+import { getErrorMessage } from '@/lib/errors';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -20,6 +21,19 @@ type UserProfile = {
   total_uploaded_size: number;
   upload_quota_bytes: number | null;
 };
+
+function mapUserProfile(user: api.User): UserProfile {
+  return {
+    id: user.id,
+    email: user.email,
+    full_name: user.fullName,
+    role: user.role,
+    suspended: !!user.suspended,
+    last_sign_in_at: user.lastSignInAt || null,
+    total_uploaded_size: user.totalUploadedSize || 0,
+    upload_quota_bytes: user.uploadQuotaBytes ?? null,
+  };
+}
 
 export default function AdminPage() {
   const { isAdmin, user, refreshProfile } = useAuth();
@@ -43,17 +57,10 @@ export default function AdminPage() {
     setLoading(true);
     try {
       const all = await api.getUsers();
-      setUsers(all.map((u) => ({
-        id: u.id,
-        email: u.email,
-        full_name: u.fullName,
-        role: u.role,
-        suspended: !!u.suspended,
-        last_sign_in_at: u.lastSignInAt || null,
-        total_uploaded_size: u.totalUploadedSize || 0,
-        upload_quota_bytes: u.uploadQuotaBytes ?? null,
-      })));
-    } catch (err: any) { toast.error(err.message); }
+      setUsers(all.map(mapUserProfile));
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Failed to load users'));
+    }
     setLoading(false);
   };
 
@@ -78,7 +85,9 @@ export default function AdminPage() {
       setShowInvite(false);
       setInviteEmail(''); setInviteName(''); setInvitePassword('');
       fetchUsers();
-    } catch (err: any) { toast.error(err.message); }
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Failed to create user'));
+    }
     setInviteLoading(false);
   };
 
@@ -108,7 +117,9 @@ export default function AdminPage() {
       }
       setEditUser(null);
       fetchUsers();
-    } catch (err: any) { toast.error(err.message); }
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Failed to update user'));
+    }
   };
 
   const handlePasswordReset = async () => {
@@ -117,7 +128,9 @@ export default function AdminPage() {
       await api.resetUserPassword(editUser.id, passwordResetValue);
       toast.success('Password reset successfully');
       setPasswordResetValue('');
-    } catch (err: any) { toast.error(err.message); }
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Failed to reset password'));
+    }
   };
 
   const handleDeleteUser = async () => {
@@ -128,7 +141,9 @@ export default function AdminPage() {
       toast.success('User deleted');
       setEditUser(null);
       fetchUsers();
-    } catch (err: any) { toast.error(err.message); }
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Failed to delete user'));
+    }
   };
 
   const handleSuspendToggle = async (target: UserProfile) => {
@@ -141,7 +156,9 @@ export default function AdminPage() {
         await refreshProfile();
       }
       fetchUsers();
-    } catch (err: any) { toast.error(err.message); }
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Failed to update suspension'));
+    }
   };
 
   const formatLastSignIn = (value: string | null) => {

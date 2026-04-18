@@ -55,7 +55,7 @@ export function useDocuments(filter?: {
     queryKey: ['documents', user?.id, normalizedFilter],
     queryFn: async () => {
       if (!user) return [];
-      return (await api.getDocuments(user.id, normalizedFilter)) as unknown as Document[];
+      return (await api.getDocuments(normalizedFilter)) as Document[];
     },
     enabled: !!user,
     refetchInterval: 1000,
@@ -66,7 +66,8 @@ export function useDocuments(filter?: {
 export function useDocumentMutations() {
   const { user } = useAuth();
   const qc = useQueryClient();
-  const invalidate = () => {
+
+  const invalidateDocuments = async () => {
     qc.invalidateQueries({ queryKey: ['documents'] });
     qc.invalidateQueries({ queryKey: ['document-history'] });
   };
@@ -74,10 +75,10 @@ export function useDocumentMutations() {
   const uploadDocument = useMutation({
     mutationFn: async (file: File) => {
       if (!user) throw new Error('Not authenticated');
-      return api.uploadDocument(user.id, file);
+      return api.uploadDocument(file);
     },
     onSuccess: (document) => {
-      invalidate();
+      void invalidateDocuments();
       toast.success(document?.summary_auto_started ? 'Document uploaded. Summary generation started.' : 'Document uploaded');
     },
     onError: (e: Error) => toast.error(e.message),
@@ -87,7 +88,7 @@ export function useDocumentMutations() {
     mutationFn: async ({ id, name }: { id: string; name: string }) => {
       await api.renameDocument(id, name);
     },
-    onSuccess: () => { invalidate(); toast.success('Renamed'); },
+    onSuccess: () => { void invalidateDocuments(); toast.success('Renamed'); },
     onError: (e: Error) => toast.error(e.message),
   });
 
@@ -95,18 +96,18 @@ export function useDocumentMutations() {
     mutationFn: async ({ id, starred }: { id: string; starred: boolean }) => {
       await api.toggleStar(id, starred);
     },
-    onSuccess: () => invalidate(),
+    onSuccess: () => void invalidateDocuments(),
   });
 
   const trashDocument = useMutation({
     mutationFn: async (id: string) => { await api.trashDocument(id); },
-    onSuccess: () => { invalidate(); toast.success('Moved to trash'); },
+    onSuccess: () => { void invalidateDocuments(); toast.success('Moved to trash'); },
     onError: (e: Error) => toast.error(e.message),
   });
 
   const restoreDocument = useMutation({
     mutationFn: async (id: string) => { await api.restoreDocument(id); },
-    onSuccess: () => { invalidate(); toast.success('Restored'); },
+    onSuccess: () => { void invalidateDocuments(); toast.success('Restored'); },
     onError: (e: Error) => toast.error(e.message),
   });
 
@@ -114,7 +115,7 @@ export function useDocumentMutations() {
     mutationFn: async ({ id, storagePath }: { id: string; storagePath: string }) => {
       await api.permanentDelete(id, storagePath);
     },
-    onSuccess: () => { invalidate(); toast.success('Permanently deleted'); },
+    onSuccess: () => { void invalidateDocuments(); toast.success('Permanently deleted'); },
     onError: (e: Error) => toast.error(e.message),
   });
 
@@ -122,13 +123,13 @@ export function useDocumentMutations() {
     mutationFn: async ({ id, shared, config }: { id: string; shared: boolean; config?: ShareConfig }) => {
       return await api.toggleShare(id, shared, config);
     },
-    onSuccess: () => invalidate(),
+    onSuccess: () => void invalidateDocuments(),
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const downloadDocument = async (storagePath: string, fileName: string) => {
+  const downloadDocument = async (documentId: string, fileName: string) => {
     try {
-      await api.downloadDocument(storagePath, fileName);
+      await api.downloadDocument(documentId, fileName);
     } catch {
       toast.error('Download failed');
     }

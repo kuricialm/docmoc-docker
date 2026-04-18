@@ -12,7 +12,8 @@ import SettingsPage from '@/pages/Settings';
 import AdminPage from '@/pages/Admin';
 import { useDocumentMutations } from '@/hooks/useDocuments';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { ACCEPTED_UPLOAD_ATTR, isAcceptedUploadFile } from '@/lib/fileTypes';
+import { ACCEPTED_UPLOAD_ATTR } from '@/lib/fileTypes';
+import { formatUnsupportedUploadMessage, partitionAcceptedUploadFiles } from '@/lib/uploads';
 import { UploadCloud } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -37,15 +38,18 @@ export default function MainLayout() {
     fileInputRef.current?.click();
   };
 
+  const queueUploads = useCallback((files: File[]) => {
+    const { accepted, rejectedCount } = partitionAcceptedUploadFiles(files);
+    accepted.forEach((file) => uploadDocument.mutate(file));
+    if (rejectedCount > 0) {
+      toast.error(formatUnsupportedUploadMessage(rejectedCount));
+    }
+  }, [uploadDocument]);
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
-    const accepted = Array.from(files).filter(isAcceptedUploadFile);
-    const rejected = files.length - accepted.length;
-    accepted.forEach((f) => uploadDocument.mutate(f));
-    if (rejected > 0) {
-      toast.error(`${rejected} file${rejected > 1 ? 's were' : ' was'} skipped (unsupported format).`);
-    }
+    queueUploads(Array.from(files));
     e.target.value = '';
   };
 
@@ -88,13 +92,8 @@ export default function MainLayout() {
     resetDragState();
     const files = Array.from(e.dataTransfer.files);
     if (!files.length) return;
-    const accepted = files.filter(isAcceptedUploadFile);
-    const rejected = files.length - accepted.length;
-    accepted.forEach((f) => uploadDocument.mutate(f));
-    if (rejected > 0) {
-      toast.error(`${rejected} file${rejected > 1 ? 's were' : ' was'} skipped (unsupported format).`);
-    }
-  }, [hasFileDrag, resetDragState, uploadDocument]);
+    queueUploads(files);
+  }, [hasFileDrag, queueUploads, resetDragState]);
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-background">

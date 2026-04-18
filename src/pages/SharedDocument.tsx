@@ -1,17 +1,17 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { FileText, Download, AlertCircle, Moon, Sun } from 'lucide-react';
+import { FileText, Download, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { getFileTypeInfo, formatFileSize, isImageType } from '@/lib/fileTypes';
 import FileTypeIcon from '@/components/FileTypeIcon';
 import * as api from '@/lib/api';
-import { useTheme } from '@/hooks/useTheme';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import { hasArabicCharacters } from '@/lib/text';
 import { getUploadedByLabel } from '@/lib/documentMeta';
 import DocumentPreview from '@/components/DocumentPreview';
+import ThemeToggleButton from '@/components/ThemeToggleButton';
 
 
 export default function SharedDocument() {
@@ -25,8 +25,6 @@ export default function SharedDocument() {
   const [requiresPassword, setRequiresPassword] = useState(false);
   const [passwordError, setPasswordError] = useState('');
   const [unlocking, setUnlocking] = useState(false);
-  const { resolvedTheme, setTheme } = useTheme();
-  const isDark = resolvedTheme === 'dark';
   const { appSettings } = useAuth();
 
   const loadDocument = useCallback(async (password?: string, options?: { keepContentVisible?: boolean }) => {
@@ -135,9 +133,7 @@ export default function SharedDocument() {
         <span className="text-sm font-semibold">Docmoc</span>
         <span className="text-xs text-muted-foreground ml-2">Shared Document</span>
         <div className="ml-auto flex items-center gap-2">
-          <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setTheme(isDark ? 'light' : 'dark')} aria-label="Toggle theme">
-            {isDark ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-muted-foreground" />}
-          </Button>
+          <ThemeToggleButton variant="outline" size="icon" className="h-8 w-8" />
           <Button variant="outline" size="sm" className="gap-1.5" onClick={handleDownload}>
           <Download className="w-3.5 h-3.5" /> Download
           </Button>

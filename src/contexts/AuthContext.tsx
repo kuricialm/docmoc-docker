@@ -1,7 +1,8 @@
-import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useState, type ReactNode } from 'react';
 import { useTheme } from '@/hooks/useTheme';
 import * as api from '@/lib/api';
 import { getFaviconMimeType } from '@/lib/favicon';
+import { applyThemePrimaryColor } from '@/lib/theme';
 
 type Profile = {
   id: string;
@@ -33,7 +34,7 @@ const AuthContext = createContext<AuthContextType>({
   settingsLoading: true,
   isAdmin: false,
   profile: null,
-  appSettings: { registration_enabled: true, workspace_logo_url: null, workspace_favicon_url: null },
+  appSettings: api.DEFAULT_APP_SETTINGS,
   signOut: () => {},
   signIn: async () => {},
   refreshProfile: async () => {},
@@ -41,33 +42,6 @@ const AuthContext = createContext<AuthContextType>({
 });
 
 export const useAuth = () => useContext(AuthContext);
-
-const DEFAULT_PRIMARY_HSL = '0 0% 0%';
-const LIGHT_PRIMARY_HSL = '0 0% 100%';
-const BLACK_HEX = '#000000';
-
-const hexToHsl = (hex: string) => {
-  const n = hex.replace('#', '');
-  if (n.length !== 6) return null;
-  const r = parseInt(n.substring(0, 2), 16) / 255;
-  const g = parseInt(n.substring(2, 4), 16) / 255;
-  const b = parseInt(n.substring(4, 6), 16) / 255;
-  const max = Math.max(r, g, b), min = Math.min(r, g, b);
-  const delta = max - min;
-  const lightness = (max + min) / 2;
-  let hue = 0, saturation = 0;
-  if (delta !== 0) {
-    saturation = delta / (1 - Math.abs(2 * lightness - 1));
-    switch (max) {
-      case r: hue = ((g - b) / delta) % 6; break;
-      case g: hue = (b - r) / delta + 2; break;
-      default: hue = (r - g) / delta + 4;
-    }
-    hue *= 60;
-    if (hue < 0) hue += 360;
-  }
-  return `${Math.round(hue)} ${Math.round(saturation * 100)}% ${Math.round(lightness * 100)}%`;
-};
 
 function userToProfile(u: api.User): Profile {
   return {
@@ -82,26 +56,34 @@ function userToProfile(u: api.User): Profile {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const { resolvedTheme } = useTheme();
+  const isPublicSharedRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/shared/');
   const [currentUser, setCurrentUser] = useState<api.User | null>(null);
   const [loading, setLoading] = useState(true);
   const [settingsLoading, setSettingsLoading] = useState(true);
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [appSettings, setAppSettings] = useState<api.AppSettings>({ registration_enabled: true, workspace_logo_url: null, workspace_favicon_url: null });
+  const [appSettings, setAppSettings] = useState<api.AppSettings>(api.DEFAULT_APP_SETTINGS);
 
   useEffect(() => {
+    if (isPublicSharedRoute) {
+      setCurrentUser(null);
+      setProfile(null);
+      setLoading(false);
+      return;
+    }
+
     api.getCurrentUser().then((u) => {
       setCurrentUser(u);
       setProfile(u ? userToProfile(u) : null);
       setLoading(false);
     }).catch(() => setLoading(false));
-  }, []);
+  }, [isPublicSharedRoute]);
 
   const refreshSettings = useCallback(async () => {
     try {
       const s = await api.getSettings();
       setAppSettings(s);
     } catch {
-      setAppSettings({ registration_enabled: true, workspace_logo_url: null, workspace_favicon_url: null });
+      setAppSettings(api.DEFAULT_APP_SETTINGS);
     } finally {
       setSettingsLoading(false);
     }
@@ -125,7 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshProfile = useCallback(async () => {
     if (!currentUser) return;
-    const u = await api.getProfile(currentUser.id);
+    const u = await api.getProfile();
     if (u) {
       setCurrentUser(u);
       setProfile(userToProfile(u));
@@ -135,18 +117,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const user = currentUser ? { id: currentUser.id, email: currentUser.email, uploadQuotaBytes: currentUser.uploadQuotaBytes ?? null } : null;
   const isAdmin = currentUser?.role === 'admin';
 
-  useEffect(() => {
-    const selectedAccent = profile?.accent_color?.toLowerCase() || null;
-    const accentHsl = selectedAccent === BLACK_HEX && resolvedTheme === 'dark'
-      ? LIGHT_PRIMARY_HSL
-      : selectedAccent
-        ? hexToHsl(selectedAccent)
-        : null;
-    const primaryColor = accentHsl || DEFAULT_PRIMARY_HSL;
-    const root = document.documentElement;
-    root.style.setProperty('--primary', primaryColor);
-    root.style.setProperty('--ring', primaryColor);
-    root.style.setProperty('--sidebar-primary', primaryColor);
+  useLayoutEffect(() => {
+    applyThemePrimaryColor(profile?.accent_color, resolvedTheme);
   }, [profile?.accent_color, resolvedTheme]);
 
   useEffect(() => {

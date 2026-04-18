@@ -1,9 +1,9 @@
 import { useAuth } from '@/contexts/AuthContext';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, Upload, LogOut, Settings, Menu, Moon, Sun } from 'lucide-react';
+import { Search, Upload, LogOut, Settings, Menu } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useTheme } from '@/hooks/useTheme';
+import ThemeToggleButton from '@/components/ThemeToggleButton';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,8 +23,6 @@ type Props = {
 export default function TopBar({ search, onSearchChange, onUpload, onMenuToggle, isMobile }: Props) {
   const { profile, signOut } = useAuth();
   const navigate = useNavigate();
-  const { resolvedTheme, setTheme } = useTheme();
-  const isDark = resolvedTheme === 'dark';
 
   return (
     <header className="h-14 border-b border-border bg-background flex items-center px-3 sm:px-5 gap-2 sm:gap-3 shrink-0 sticky top-0 z-20">
@@ -44,9 +42,7 @@ export default function TopBar({ search, onSearchChange, onUpload, onMenuToggle,
       </div>
 
       <div className="flex items-center gap-1 ml-auto">
-        <Button variant="ghost" size="icon" className="h-8 w-8 ml-1" onClick={() => setTheme(isDark ? 'light' : 'dark')} aria-label="Toggle theme">
-          {isDark ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-muted-foreground" />}
-        </Button>
+        <ThemeToggleButton variant="ghost" size="icon" className="h-8 w-8 ml-1" />
 
         <Button onClick={onUpload} size="sm" className="h-8 ml-1 sm:ml-2 gap-1.5 text-xs px-2.5 sm:px-3.5 rounded-lg font-medium">
           <Upload className="w-3.5 h-3.5" />

@@ -21,6 +21,12 @@ function createAuthRoutes({ authMiddleware, authService, config }) {
     res.json({ ok: true });
   }));
 
+  router.get('/api/auth/session', asyncHandler(async (req, res) => {
+    res.json({
+      user: authService.getOptionalAuthenticatedUserBySessionToken(req.cookies.session),
+    });
+  }));
+
   router.get('/api/auth/me', authMiddleware.auth, asyncHandler(async (req, res) => {
     res.json(req.user);
   }));

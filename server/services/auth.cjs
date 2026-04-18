@@ -43,6 +43,14 @@ function createAuthService({
       return buildSessionUser(user);
     },
 
+    getOptionalAuthenticatedUserBySessionToken(token) {
+      try {
+        return this.getAuthenticatedUserBySessionToken(token);
+      } catch {
+        return null;
+      }
+    },
+
     login(req, { email, password, rememberMe = false }) {
       const normalizedEmail = normalizeEmail(email);
       if (!normalizedEmail || typeof password !== 'string') {
