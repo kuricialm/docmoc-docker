@@ -33,7 +33,7 @@ const protectedPathRules = [
   },
 ];
 
-const placeholderValuePattern = /(replace-with|change-me|your-|example|dummy|test-|docmoc\.example|localhost)/i;
+const placeholderValuePattern = /(replace(?:_|-)with|change(?:_|-)me|your(?:_|-)|example|dummy|test-|docmoc\.example|localhost)/i;
 
 const secretContentRules = [
   {
@@ -156,4 +156,10 @@ function main() {
   console.log('Sensitive content scan passed.');
 }
 
-main();
+if (require.main === module) {
+  main();
+}
+
+module.exports = {
+  findSensitiveAssignments,
+};
